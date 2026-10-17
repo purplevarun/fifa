@@ -167,8 +167,16 @@ identities are not rewritten.
 Supported screens include:
 
 - Match/team stats, player performances, selected-player profiles and season totals.
+- Visible Notts County goals/assists leaderboard rows, including appearances,
+  kept as separate cumulative observations rather than extra match records.
 - Completed transfers and loans, weekly wages, contract lengths and loan lengths.
+- Dated outbound-loan confirmation emails that explicitly state an immediate move.
 - Player of the Month, Player of the Year, player/goalkeeper competition awards, Golden Boot headlines and competition winners, including championship dashboard banners.
+
+EFL Championship and UEFA Champions/Europa League competition names are supported.
+Trophy articles with “Win the …” or “… winners” headlines are recognized, as are
+confirmed promotion articles. A pre-contract for a future transfer window is not
+treated as a completed move.
 
 Offers still in negotiation and award shortlists are not treated as completed
 signings or wins. Missing years, selling clubs, fees and competition context stay
@@ -230,6 +238,49 @@ archives.
 Recognition and relationship validation cannot guarantee 100% accuracy for
 arbitrary screenshots. Unsupported screens and missing context are reported;
 zero coverage warnings does not mean every screenshot yielded a record.
+
+### Full-archive audit
+
+```sh
+python3 -m processing.audit --output processing/data/ocr-audit.json
+```
+
+This is a **read-only check**, not a rebuild. It visits every original path in
+numeric order, verifies image hashes against OCR evidence, and reports files
+that are new, changed, unextracted, unimported, or produced no records. Identical
+files are listed individually even though processing deduplicates their content.
+Use `--db /absolute/path/to/audit.sqlite` to inspect an isolated processing run.
+
+The report checks every expected on-screen player/team count, percentage
+consistency, profile metadata, and competition-row sums against displayed totals.
+Leaderboard checks require only the metrics actually shown. The separate
+`ordered_snapshot_comparisons` section compares cumulative counts with preceding
+match captures, relying on the confirmed chronological order without inventing
+an observation date or silently marking an undated snapshot as season-end.
+Standard date-based reconciliation still reports unconfirmed cutoffs explicitly.
+
+An optional `--independent /path/to/readings.jsonl` accepts a second local OCR
+reader's evidence (`path`, `tokens` with normalized four-point `box`, `text` and
+`confidence`, and optional `error`). Numeric comparisons require isolated cells
+at matching coordinates. Disagreements, second-reader errors and unmatched
+numeric fields are counted separately. Agreement is not proof of correctness.
+
+Season-table recovery handles white text on dark backgrounds as well as dark
+text on light backgrounds. Low-confidence numbers, including already-parseable
+multi-digit counts, are checked with contrast/scale variants. Three-copy and
+five-copy readings must agree; confident conflicting variants prevent a
+correction. Profile positions, age and nationality come from the complete
+details line so separators and extra positions cannot shift the age crop.
+Fixture club names use the same conservative tight-crop consensus as player
+names; tokens spanning a neighbouring score are excluded. Original readings and
+all retry evidence remain available.
+
+An audit exits nonzero for unresolved source/field issues or numeric disagreements;
+it does not rewrite them to make checks pass. For example, a negative count shown
+by the game is retained in OCR evidence while its non-negative statistic remains
+unknown. Neither successful import nor this automated audit is manual visual
+verification. Reports in `processing/data/` are deleted by the next `./run process`;
+copy any report or audit database outside that folder to retain it.
 
 ## Delete Old Screenshots
 

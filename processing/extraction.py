@@ -16,6 +16,9 @@ COMPETITION_LABELS = {
     "invitationalcup": "Invitational Cup",
     "eflleaguetwo": "EFL League Two",
     "eflleagueone": "EFL League One",
+    "eflchampionship": "EFL Championship",
+    "uefachampionsleague": "UEFA Champions League",
+    "uefaeuropaleague": "UEFA Europa League",
     "lgtwoplayoffs": "EFL League Two Play-Offs",
     "lgoneplayoffs": "EFL League One Play-Offs",
     "carabaocup": "Carabao Cup",
@@ -106,14 +109,21 @@ def classify(text):
             if "goalkeeping" in normalized
             else "player_performance"
         )
-    if "matchfacts" in normalized:
-        return "match_facts"
-    if "careersquadhub" in normalized:
-        return "squad"
-    if "careertransferhub" in normalized:
-        return "transfer"
-    if "centralnews" in normalized:
-        return "news"
+    for marker, screen_type in (
+        ("matchfacts", "match_facts"),
+        ("careersquadhub", "squad"),
+        ("careertransferhub", "transfer"),
+        ("centralnews", "news"),
+        ("officeinbox", "inbox"),
+    ):
+        if marker in normalized:
+            return screen_type
+    if (
+        "playerstats" in normalized
+        and "rank" in normalized
+        and ("topscorers" in normalized or "assists" in normalized)
+    ):
+        return "player_leaderboard"
     if "congratulations" in normalized and "winner" in normalized:
         return "competition_result"
     if "scoresfixtures" in normalized and (
@@ -121,19 +131,22 @@ def classify(text):
     ):
         return "league_table"
     if "standings" in normalized:
-        if (
-            re.search(
-                r"(?:grabs|wins)(?:"
-                + "|".join(month.lower() for month in MONTHS)
-                + r")playerofthemonth",
-                normalized,
-            )
-            or "playeroftheyear" in normalized
-            or re.search(r"crowned.+champions?", normalized)
-        ):
-            return "dashboard_award"
-        return "dashboard"
+        return classify_dashboard(normalized)
     return "unknown"
+
+
+def classify_dashboard(normalized):
+    award = (
+        re.search(
+            r"(?:grabs|wins)(?:"
+            + "|".join(month.lower() for month in MONTHS)
+            + r")playerofthemonth",
+            normalized,
+        )
+        or "playeroftheyear" in normalized
+        or re.search(r"crowned.+champions?", normalized)
+    )
+    return "dashboard_award" if award else "dashboard"
 
 
 def ordinal(number):
@@ -154,10 +167,12 @@ def parse_number(text):
     return float(text) if re.fullmatch(r"\d+(?:\.\d+)?", text) else None
 
 
-def parse_counts(text, count):
-    parts = text.replace(" ", "").split("/")
+def parse_counts(text, count, signed=False):
+    parts = text.replace(" ", "").replace("−", "-").split("/")
     if len(parts) != count:
         return [None] * count
+    if signed:
+        return [int(part) if re.fullmatch(r"-?\d+", part) else None for part in parts]
     return [parse_integer(part) for part in parts]
 
 
@@ -251,13 +266,38 @@ def parse_header(text):
         ),
         None,
     )
-    sections = re.split(r"\s*[|]\s*|\s+I\s+", cleaned)
+    sections = re.split(r"\s*[|/]\s*|\s+[Il]\s+", cleaned)
     venue = sections[1].strip() if len(sections) >= 3 else None
+    if venue is None and matched:
+        remainder = cleaned[matched.end() :].strip()
+        sections = re.split(r"\s*[|/]\s*|\s+[Il]\s+", remainder)
+        if len(sections) == 2 and any(
+            alias in compact(sections[1]) for alias in COMPETITION_LABELS
+        ):
+            venue = sections[0].strip()
     return {
         "played_on": played_on,
         "season": season,
         "competition": competition,
         "venue": venue,
+    }
+
+
+def parse_profile_details(text):
+    positions = r"(?:GK|RWB|LWB|CDM|CAM|CB|RB|LB|CM|RM|LM|RW|LW|CF|ST|RF|LF)"
+    matched = re.search(
+        rf"(?<![A-Za-z])({positions}(?:\s*/\s*{positions})*)\s*[|Il]?\s*"
+        r"Age\s*:?\s*(\d{1,2})\s*(?:\||[Il](?=\s|>))?\s*"
+        r"(?:[>●•]\s*)?([A-Za-z][A-Za-z .'-]+)$",
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if not matched:
+        return {}
+    return {
+        "displayed_position": re.sub(r"\s+", "", matched.group(1)).upper(),
+        "age": int(matched.group(2)),
+        "nationality": matched.group(3).strip(),
     }
 
 
@@ -345,6 +385,13 @@ def parse_news_event(title, body="", announced_on=None, observed_on=None):
     champion = re.fullmatch(
         r"(.+?)\s*Crowned\s*(.+?)\s*Champions?[.!]?", title, re.IGNORECASE
     )
+    cup_winner = re.fullmatch(
+        r"(.+?)\s+(?:Win(?:s)?\s+(?:the\s+)?|emerge\s+as\s+|are\s+)(.+?)"
+        r"(?:\s+winners)?[.!]?",
+        title,
+        re.IGNORECASE,
+    )
+    promotion = re.fullmatch(r"(.+?)\s+Secure\s+Promotion[.!]?", title, re.IGNORECASE)
     golden_boot = re.fullmatch(
         r"(.+?)\s*Wins\s*Golden\s*Boot[.!]?", title, re.IGNORECASE
     )
@@ -399,6 +446,19 @@ def parse_news_event(title, body="", announced_on=None, observed_on=None):
         event_type = "champion"
         club = club_name(champion.group(1))
         competition = parse_header(champion.group(2))["competition"]
+    elif cup_winner and parse_header(cup_winner.group(2))["competition"]:
+        event_type = "champion"
+        club = club_name(cup_winner.group(1))
+        competition = parse_header(cup_winner.group(2))["competition"]
+    elif promotion and re.search(r"\bclinched\s+promotion\s+to\b", body, re.IGNORECASE):
+        event_type = "promotion"
+        club = club_name(promotion.group(1))
+        destination = re.search(
+            r"promotion\s+to\s+(?:the\s+)?(.+?)(?:\s+in\b|[.!])", body, re.IGNORECASE
+        )
+        competition = (
+            parse_header(destination.group(1))["competition"] if destination else None
+        )
     elif golden_boot:
         event_type = "golden_boot"
         player = golden_boot.group(1).strip()
@@ -417,7 +477,15 @@ def parse_news_event(title, body="", announced_on=None, observed_on=None):
             if employer:
                 club = club_name(employer.group(1))
         else:
-            return None
+            announced = re.search(
+                r"(?:announced|anounced)\s+as\s+being\s+(.+?)['\u2019]s\s+(.+?)[.!]?$",
+                body,
+                re.IGNORECASE,
+            )
+            if not announced:
+                return None
+            club = club_name(announced.group(1))
+            player = announced.group(2).strip()
     else:
         return None
     season_year = event_date.year - (event_date.month < 7) if event_date else None
@@ -437,6 +505,19 @@ def parse_news_event(title, body="", announced_on=None, observed_on=None):
     }
 
 
+def repeated_number(reading, max_digits=1):
+    text, copies = reading["raw_text"], reading["copies"]
+    width = len(text) // copies
+    if (
+        reading["confidence"] >= 0.6
+        and re.fullmatch(r"[0-9]+", text)
+        and 1 <= width <= max_digits
+        and text == text[:width] * copies
+    ):
+        return text[:width]
+    return None
+
+
 class ScreenshotExtractor:
     def __init__(self, engine=None):
         if engine is None:
@@ -445,7 +526,7 @@ class ScreenshotExtractor:
             engine = RapidOCR()
         self.engine = engine
 
-    def recognize(self, image, regions, integer_fields=()):
+    def recognize(self, image, regions, integer_fields=(), verify_numeric=False):
         crops = []
         evidence = {}
         for field, bounds in regions.items():
@@ -473,12 +554,14 @@ class ScreenshotExtractor:
         retries = []
         retry_fields = []
         for field, crop in zip(regions, crops):
-            if (
-                field not in integer_fields
-                or parse_integer(evidence[field]["raw_text"]) is not None
+            if field not in integer_fields or (
+                parse_integer(evidence[field]["raw_text"]) is not None
+                and (not verify_numeric or evidence[field]["confidence"] >= 0.85)
             ):
                 continue
             grayscale = Image.fromarray(crop[:, :, ::-1]).convert("L")
+            if np.median(np.asarray(grayscale)) < 128:
+                grayscale = ImageOps.invert(grayscale)
             binary = grayscale.point(lambda value: 0 if value < 160 else 255)
             bounds = ImageOps.invert(binary).getbbox()
             if bounds is None or bounds[3] - bounds[1] < max(3, binary.height * 0.35):
@@ -488,53 +571,85 @@ class ScreenshotExtractor:
                 (max(1, round(glyph.width * 48 / glyph.height)), 48),
                 Image.Resampling.LANCZOS,
             )
-            for copies in (3, 5):
-                strip = Image.new("L", ((glyph.width + 8) * copies + 8, 64), 255)
-                for index in range(copies):
-                    strip.paste(glyph, (8 + index * (glyph.width + 8), 8))
-                retries.append(np.asarray(strip.convert("RGB"))[:, :, ::-1].copy())
-                retry_fields.append((field, copies))
+            variants = {"grayscale": glyph}
+            if verify_numeric:
+                variants["threshold"] = glyph.point(
+                    lambda value: 0 if value < 160 else 255
+                )
+                variants["wide"] = glyph.resize(
+                    (round(glyph.width * 1.5), 48), Image.Resampling.LANCZOS
+                )
+            for variant, glyph_image in variants.items():
+                for copies in (3, 5):
+                    strip = Image.new(
+                        "L", ((glyph_image.width + 8) * copies + 8, 64), 255
+                    )
+                    for index in range(copies):
+                        strip.paste(
+                            glyph_image, (8 + index * (glyph_image.width + 8), 8)
+                        )
+                    retries.append(np.asarray(strip.convert("RGB"))[:, :, ::-1].copy())
+                    retry_fields.append((field, copies, variant))
         if retries:
             recovered, elapsed = self.engine.text_recognizer(retries)
             if len(recovered) != len(retry_fields):
                 raise ValueError(
                     "OCR returned a different number of numeric retry readings than supplied regions"
                 )
-            for (field, copies), (text, confidence) in zip(retry_fields, recovered):
+            for (field, copies, variant), (text, confidence) in zip(
+                retry_fields, recovered
+            ):
                 evidence[field].setdefault("numeric_retry", []).append(
                     {
                         "copies": copies,
+                        "variant": variant,
                         "raw_text": text,
                         "confidence": float(confidence),
                     }
                 )
-            for field in dict.fromkeys(field for field, copies in retry_fields):
+            for field in dict.fromkeys(
+                field for field, copies, variant in retry_fields
+            ):
                 readings = evidence[field]["numeric_retry"]
                 valid = [
-                    reading
+                    (reading, repeated_number(reading, 3 if verify_numeric else 1))
                     for reading in readings
-                    if reading["confidence"] >= 0.6
-                    and len(reading["raw_text"]) == reading["copies"]
-                    and re.fullmatch(r"[0-9]+", reading["raw_text"])
-                    and len(set(reading["raw_text"])) == 1
                 ]
+                valid = [
+                    (reading, value) for reading, value in valid if value is not None
+                ]
+                values = {value for reading, value in valid}
+                copies = {reading["copies"] for reading, value in valid}
+                confidence = min(
+                    (reading["confidence"] for reading, value in valid), default=0
+                )
+                original_value = parse_integer(evidence[field]["raw_text"])
                 if (
-                    len(valid) == 2
-                    and valid[0]["raw_text"][0] == valid[1]["raw_text"][0]
+                    len(values) == 1
+                    and copies == {3, 5}
+                    and (
+                        original_value is None
+                        or int(next(iter(values))) == original_value
+                        or confidence > evidence[field]["confidence"] + 0.05
+                    )
                 ):
                     evidence[field]["initial_reading"] = {
                         "raw_text": evidence[field]["raw_text"],
                         "confidence": evidence[field]["confidence"],
                     }
                     evidence[field].update(
-                        raw_text=valid[0]["raw_text"][0],
-                        confidence=min(reading["confidence"] for reading in valid),
-                        method="rapidocr_repeated_digit_crop",
+                        raw_text=next(iter(values)),
+                        confidence=confidence,
+                        method="rapidocr_repeated_number_crop"
+                        if verify_numeric
+                        else "rapidocr_repeated_digit_crop",
                     )
         return evidence
 
-    def refine_name_fields(self, image, tokens, fields):
-        for field in ("first_name", "last_name"):
+    def refine_name_fields(
+        self, image, tokens, fields, name_fields=("first_name", "last_name")
+    ):
+        for field in name_fields:
             original = fields[field]
             left, top, right, bottom = original["box"]
             selected = [
@@ -543,6 +658,16 @@ class ScreenshotExtractor:
                 if left <= sum(point[0] for point in token["box"]) / 4 <= right
                 and top <= sum(point[1] for point in token["box"]) / 4 <= bottom
             ]
+            if field in {"home_club", "away_club"}:
+                selected = [
+                    token
+                    for token in selected
+                    if all(
+                        left - 3 / BASE_WIDTH <= x <= right + 3 / BASE_WIDTH
+                        and top - 3 / BASE_HEIGHT <= y <= bottom + 3 / BASE_HEIGHT
+                        for x, y in token["box"]
+                    )
+                ]
             selected.sort(key=lambda token: min(point[0] for point in token["box"]))
             detected = " ".join(token["text"].strip() for token in selected)
             if (
@@ -659,6 +784,14 @@ class ScreenshotExtractor:
         elif screen_type == "news":
             records, fields, news_issues = self.extract_news(tokens)
             issues.extend(news_issues)
+        elif screen_type == "inbox":
+            records, fields, inbox_issues = self.extract_inbox(tokens)
+            issues.extend(inbox_issues)
+        elif screen_type == "player_leaderboard":
+            records, fields, leaderboard_issues = self.extract_leaderboard(
+                image, tokens
+            )
+            issues.extend(leaderboard_issues)
         elif screen_type == "dashboard_award":
             records, fields, news_issues = self.extract_dashboard_award(image, tokens)
             issues.extend(news_issues)
@@ -679,6 +812,12 @@ class ScreenshotExtractor:
                     f"{screen_type}: no supported statistics detected; OCR evidence is retained."
                 ],
             }
+        if screen_type == "match_facts":
+            self.refine_name_fields(image, tokens, fields, ("home_club", "away_club"))
+            for side in ("home", "away"):
+                records[0][f"{side}_club"] = club_name(
+                    fields[f"{side}_club"]["raw_text"]
+                )
         if screen_type in {"squad", "player_performance", "goalkeeper_performance"}:
             self.refine_name_fields(image, tokens, fields)
             name = " ".join(
@@ -688,6 +827,18 @@ class ScreenshotExtractor:
             for record in records:
                 record["player"] = name
         evidence["fields"] = fields
+        issues.extend(
+            f"Negative count displayed for {field}: {reading['raw_text']!r}; retained as OCR evidence, not replaced with zero."
+            for field, reading in fields.items()
+            if "/" in field
+            and re.search(r"(?:^|/)\s*[-−]\d", reading["raw_text"])
+            and not reading.get("normalization")
+        )
+        issues.extend(
+            f"User-confirmed absolute-count rule for {field}: {reading['raw_text']!r} -> {reading['normalization']['stored_values']}; displayed percentage retained."
+            for field, reading in fields.items()
+            if reading.get("normalization")
+        )
         issues.extend(
             f"Low OCR confidence for {field}: {reading['confidence']:.2f}"
             for field, reading in fields.items()
@@ -717,12 +868,12 @@ class ScreenshotExtractor:
         )
         text = {field: reading["raw_text"] for field, reading in fields.items()}
         completed = "andhejustjoinedtheteam" in compact(text["completion"])
+        precontract = "agreedprecontractterms" in compact(text["completion"])
         transfer_type = {"transfer": "permanent", "loan": "loan"}.get(
             compact(text["transfer_type"])
         )
         if (
             compact(text["panel_heading"]) != "contractoffers"
-            or not completed
             or compact(text["status"]) != "accepted"
             or not transfer_type
             or not text["player"]
@@ -732,7 +883,7 @@ class ScreenshotExtractor:
                 [],
                 fields,
                 [
-                    "No completed transfer or loan confirmed in the selected contract panel; offers are not signings."
+                    "No accepted signing or agreed pre-contract in the selected contract panel."
                 ],
             )
         date_text = ""
@@ -778,21 +929,68 @@ class ScreenshotExtractor:
             if transfer_type == "loan"
             else None,
         }
+        if not completed:
+            record["context_basis"] = (
+                "User-confirmed archive rule: accepted contract-panel transfers are completed "
+                "even when the capture does not yet say the player joined. No exact completion date inferred."
+            )
+        if precontract:
+            # An accepted pre-contract still displays the player's current club,
+            # not the club to which the archive owner confirms the player moved.
+            fields.update(detected_fields(tokens, {"career_club": (145, 84, 276, 114)}))
+            career_club = fields["career_club"]["raw_text"].strip()
+            record["from_club"] = record["to_club"]
+            record["to_club"] = (
+                club_name(career_club) if career_club else "Notts County"
+            )
+            record["context_basis"] = (
+                "User-confirmed archive rule: accepted pre-contracts are completed transfers "
+                "to the managed club. The selected panel shows the selling club; "
+                "no exact completion date inferred."
+            )
+            fields["current_weekly_wage_minor"] = fields["weekly_wage_minor"]
+            fields["weekly_wage_minor"] = {
+                **fields["loan_months"],
+                "method": "rapidocr_accepted_precontract_offer",
+            }
+            wage, currency, symbol = parse_money(text["loan_months"])
+            record.update(
+                weekly_wage_minor=wage, currency=currency, currency_display=symbol
+            )
+            # The expiry counter describes the old contract, not the new deal.
+            record["contract_months"] = None
+            record["date_basis"] += (
+                " Pre-contract capture date, not a known completion date."
+            )
         return (
             [record],
             fields,
             [
-                "Confirm the transfer date/year and selling club; neither is inferred from a badge or filename.",
+                record.get(
+                    "context_basis",
+                    "Confirm the transfer date/year and selling club; neither is inferred from a badge or filename.",
+                ),
                 "The contract offer is not a transfer fee. A dollar symbol alone does not identify its currency.",
             ],
         )
 
     def extract_news(self, tokens):
+        # The body starts at y=274 for one-line titles and y=306 for
+        # two-line titles. Use the second title line's top, not its centre,
+        # to avoid folding "Announced" into a club or swallowing body text.
+        wrapped_title = any(
+            949 / BASE_WIDTH <= min(point[0] for point in token["box"])
+            and 258 / BASE_HEIGHT
+            <= min(point[1] for point in token["box"])
+            < 269 / BASE_HEIGHT
+            for token in tokens
+        )
+        title_bottom = 291 if wrapped_title else 268
         fields = detected_fields(
             tokens,
             {
-                "article.title": (949, 225, 1267, 290),
-                "article.body": (949, 300, 1267, 404),
+                "article.title": (949, 225, 1267, title_bottom),
+                "article.body": (949, title_bottom, 1267, 640),
             },
         )
         title = fields["article.title"]["raw_text"]
@@ -818,8 +1016,11 @@ class ScreenshotExtractor:
             for headline, announced_on in stories
             if compact(news_title(headline)) == compact(news_title(title))
         ]
+        matching_dates = set(matching)
         selected = parse_news_event(
-            title, body, matching[0] if len(matching) == 1 else None
+            title,
+            body,
+            next(iter(matching_dates)) if len(matching_dates) == 1 else None,
         )
         records = [selected] if selected else []
         for headline, announced_on in stories:
@@ -846,6 +1047,117 @@ class ScreenshotExtractor:
                     f"Resolve {record['player']} against recorded player identities; news may display only a surname."
                 )
         return records, fields, issues
+
+    def extract_inbox(self, tokens):
+        fields = detected_fields(
+            tokens,
+            {
+                "effective_on": (790, 216, 960, 238),
+                "subject": (795, 289, 1268, 321),
+                "body": (697, 338, 1270, 641),
+                "club": (145, 84, 276, 114),
+            },
+        )
+        body = fields["body"]["raw_text"]
+        loan = re.search(
+            r"(?:Mr\.\s*[^,]+,?\s*)?(.+?)\s+has\s+accepted\s+a\s+"
+            r"(One|Two|\d+)[- ]year\s+loan\s+move\s+to\s+(.+?)\.",
+            body,
+            re.IGNORECASE,
+        )
+        effective_on = parse_news_date(fields["effective_on"]["raw_text"])
+        if (
+            not loan
+            or "loanedout" not in compact(fields["subject"]["raw_text"])
+            or not effective_on
+            or "immediately" not in body.casefold()
+        ):
+            return (
+                [],
+                fields,
+                ["No dated, completed loan confirmed in the selected email."],
+            )
+        years = {"one": 1, "two": 2}.get(loan.group(2).casefold())
+        years = years or parse_integer(loan.group(2))
+        return (
+            [
+                {
+                    "type": "player_transfer",
+                    "player": loan.group(1).strip(),
+                    "from_club": club_name(fields["club"]["raw_text"]),
+                    "to_club": club_name(loan.group(3)),
+                    "transfer_type": "loan",
+                    "effective_on": effective_on,
+                    "loan_months": years * 12,
+                    "date_basis": "Dated loan-confirmation email states that the player moves immediately.",
+                }
+            ],
+            fields,
+            [],
+        )
+
+    def extract_leaderboard(self, image, tokens):
+        fields = detected_fields(
+            tokens,
+            {
+                "competition": (240, 117, 725, 154),
+                "statistic": (240, 170, 550, 204),
+            },
+        )
+        competition = parse_header(fields["competition"]["raw_text"])["competition"]
+        statistic = {"topscorers": "goals", "assists": "assists"}.get(
+            compact(fields["statistic"]["raw_text"])
+        )
+        if not competition or not statistic:
+            return [], fields, ["Leaderboard competition or statistic is unreadable."]
+        records = []
+        for row_index in range(15):
+            center = 262 + row_index * 25.6
+            prefix = f"leaderboard.{row_index}"
+            fields.update(
+                detected_fields(
+                    tokens,
+                    {
+                        f"{prefix}.player": (274, center - 12, 588, center + 12),
+                        f"{prefix}.club": (633, center - 12, 973, center + 12),
+                    },
+                    single_line=True,
+                )
+            )
+            club = fields[f"{prefix}.club"]["raw_text"]
+            if compact(club) != "nottscounty":
+                continue
+            numeric = {
+                f"{prefix}.{statistic}": (986, center - 11, 1025, center + 12),
+                f"{prefix}.appearances": (1116, center - 11, 1155, center + 12),
+            }
+            fields.update(self.recognize(image, numeric, numeric, verify_numeric=True))
+            records.append(
+                {
+                    "type": "player_competition_snapshot",
+                    "player": fields[f"{prefix}.player"]["raw_text"].strip(),
+                    "club": "Notts County",
+                    "competition": competition,
+                    "scope": "competition",
+                    "season": None,
+                    "observed_on": None,
+                    "snapshot_kind": "in_season",
+                    "date_basis": f"Visible {statistic} leaderboard; only appearances and {statistic} are shown. No exact cutoff date displayed.",
+                    "appearances": parse_integer(
+                        fields[f"{prefix}.appearances"]["raw_text"]
+                    ),
+                    statistic: parse_integer(
+                        fields[f"{prefix}.{statistic}"]["raw_text"]
+                    ),
+                }
+            )
+        return (
+            records,
+            fields,
+            [
+                "Only visible Notts County leaderboard rows are recorded; other clubs remain in OCR evidence. Missing metrics are not zeroes."
+            ],
+        )
 
     def extract_competition_result(self, tokens):
         fields = detected_fields(
@@ -904,9 +1216,7 @@ class ScreenshotExtractor:
                     "scroll to reveal both before capturing."
                 ],
             )
-        center = (
-            sum(point[1] for point in row["box"]) / len(row["box"]) * BASE_HEIGHT
-        )
+        center = sum(point[1] for point in row["box"]) / len(row["box"]) * BASE_HEIGHT
         columns = {
             "position": (78, 108),
             "played": (490, 528),
@@ -1084,7 +1394,7 @@ class ScreenshotExtractor:
         integer_fields = {
             field for field in rows if "/" not in field and not field.endswith("_pct")
         }
-        fields = self.recognize(image, regions, integer_fields)
+        fields = self.recognize(image, regions, integer_fields | {"overall"})
         record = {
             "type": "player_match",
             "match_id": None,
@@ -1104,7 +1414,29 @@ class ScreenshotExtractor:
             raw_text = fields[field]["raw_text"]
             parts = field.split("/")
             if len(parts) > 1:
-                record.update(zip(parts, parse_counts(raw_text, len(parts))))
+                displayed = parse_counts(
+                    raw_text, len(parts), signed=field == "tackles_won/tackles_lost"
+                )
+                stored = [
+                    abs(value) if value is not None else None for value in displayed
+                ]
+                record.update(zip(parts, stored))
+                if any(value is not None and value < 0 for value in displayed):
+                    fields[field]["normalization"] = {
+                        "rule": "absolute_displayed_count",
+                        "displayed_values": displayed,
+                        "stored_values": stored,
+                        "basis": "User confirmed negative displayed tackle counts must use their absolute values.",
+                    }
+                    record["stat_adjustments"] = {
+                        part: {
+                            "rule": "absolute_displayed_count",
+                            "displayed": value,
+                            "stored": abs(value),
+                        }
+                        for part, value in zip(parts, displayed)
+                        if value is not None and value < 0
+                    }
             else:
                 record[field] = (
                     parse_number if field.endswith("_pct") else parse_integer
@@ -1119,8 +1451,17 @@ class ScreenshotExtractor:
             "displayed_position": (713, 310, 738, 335),
             "age": (764, 310, 784, 335),
             "nationality": (818, 310, 1039, 335),
+            "profile_details": (697, 309, 1040, 336),
         }
-        fields = self.recognize(image, regions)
+        fields = self.recognize(image, regions, {"overall"}, verify_numeric=True)
+        details = parse_profile_details(fields["profile_details"]["raw_text"])
+        for field, value in details.items():
+            fields[field] = {
+                **fields["profile_details"],
+                "raw_text": str(value),
+                "initial_reading": fields[field],
+                "method": "rapidocr_profile_details_line",
+            }
         return {
             "type": "player_snapshot",
             "season": None,
@@ -1160,7 +1501,13 @@ class ScreenshotExtractor:
             regions[f"{prefix}.competition"] = (701, center - 10, 809, center + 10)
             for field, (left, right) in numeric_columns.items():
                 regions[f"{prefix}.{field}"] = (left, center - 10, right, center + 10)
-        evidence = self.recognize(image, regions)
+        integer_fields = {
+            field
+            for field in regions
+            if field.rsplit(".", 1)[-1] in numeric_columns
+            and not field.endswith("average_rating")
+        }
+        evidence = self.recognize(image, regions, integer_fields, verify_numeric=True)
         records = []
         for row_index in range(6):
             prefix = f"season_totals.{row_index}"

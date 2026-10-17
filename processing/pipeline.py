@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import EXTRACTOR_VERSION, SCHEMA_VERSION
 from .database import (
+    COMPETITIONS,
     EXPORT_TABLES,
     coverage_report,
     image_hash,
@@ -23,7 +24,14 @@ from .reconciliation import player_match_goals, reconcile_totals
 
 
 BOOLEAN_FIELDS = {"is_preseason", "extra_time", "started"}
-NON_MATCH_SCREEN_TYPES = {"transfer", "news", "competition_result", "dashboard_award"}
+NON_MATCH_SCREEN_TYPES = {
+    "transfer",
+    "news",
+    "competition_result",
+    "dashboard_award",
+    "inbox",
+    "player_leaderboard",
+}
 RECORD_TABLES = {
     "match": "matches",
     "player_match": "player_matches",
@@ -49,6 +57,7 @@ CONTEXT_FIELDS = {
     "from_club",
     "to_club",
     "context_basis",
+    "stat_adjustments",
 }
 
 
@@ -252,7 +261,12 @@ def resolve_candidate_players(connection, extraction, strict=False):
     for record in extraction["records"]:
         name = record.get("player")
         if (
-            record.get("type") not in {"player_transfer", "competition_event"}
+            record.get("type")
+            not in {
+                "player_transfer",
+                "competition_event",
+                "player_competition_snapshot",
+            }
             or not name
             or record.get("player_id")
         ):
@@ -531,6 +545,21 @@ def ensure_edition(connection, record):
         "SELECT * FROM competitions WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
     if competition is None:
+        # New built-in competitions must also work with older schema-4 archives.
+        known = next(
+            (item for item in COMPETITIONS if item[0].casefold() == name.casefold()),
+            None,
+        )
+        if known:
+            record = {"competition_kind": known[1], "is_preseason": known[2], **record}
+            if (
+                record["competition_kind"] != known[1]
+                or type(record["is_preseason"]) is not bool
+                or record["is_preseason"] != known[2]
+            ):
+                raise ValueError(
+                    f"Classification conflicts with the known competition: {name}"
+                )
         if type(record.get("is_preseason")) is not bool or record.get(
             "competition_kind"
         ) not in {"league", "cup", "friendly"}:
@@ -672,6 +701,42 @@ def confirmed_match(connection, record):
     if not match:
         raise ValueError(f"Unknown match: {match_id}")
     return match
+
+
+def repeated_transfer_source(connection, record, values):
+    """Deduplicate only fully agreeing captures with a supported date context."""
+    if not record.get("season") or not re.match(
+        r"\d{1,2}/\d{1,2} shown in", record.get("date_basis", "")
+    ):
+        return None
+    existing = connection.execute(
+        "SELECT * FROM player_transfers WHERE player_id=? AND transfer_type=? AND to_club_id IS ? AND from_club_id IS ?",
+        (
+            values["player_id"],
+            values["transfer_type"],
+            values.get("to_club_id"),
+            values.get("from_club_id"),
+        ),
+    ).fetchall()
+    for previous in existing:
+        if previous["source_id"] == values["source_id"] or any(
+            previous[field] != value
+            for field, value in values.items()
+            if field != "source_id"
+        ):
+            continue
+        review = connection.execute(
+            "SELECT payload_json FROM reviews WHERE source_id=? ORDER BY revision DESC LIMIT 1",
+            (previous["source_id"],),
+        ).fetchone()
+        if review and any(
+            item.get("type") == "player_transfer"
+            and item.get("season") == record["season"]
+            and item.get("player") == record.get("player")
+            for item in json.loads(review["payload_json"])["records"]
+        ):
+            return previous["source_id"]
+    return None
 
 
 def import_record(connection, source_id, record, replace_reviewed=False):
@@ -828,6 +893,9 @@ def import_record(connection, source_id, record, replace_reviewed=False):
             if record.get("to_club")
             else None,
         )
+        repeated_source = repeated_transfer_source(connection, record, values)
+        if repeated_source:
+            values["source_id"] = repeated_source
         key = {
             field: values[field]
             for field in ("source_id", "player_id", "transfer_type")
@@ -1314,6 +1382,12 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
                     )
                 resolve_candidate_players(connection, document, strict=True)
                 for record in document["records"]:
+                    if record.get("type") == "player_transfer" and not record.get(
+                        "season"
+                    ):
+                        context = season_contexts.get(source["id"])
+                        if context:
+                            record["season"] = context[0]
                     if (
                         record.get("type")
                         in {
