@@ -1,5 +1,9 @@
 # Screenshot OCR audit — 17 October 2026
 
+> Follow-up: [Dashboard and screenshot review](DASHBOARD_REVIEW.md) found malformed
+> profile text, seven split club identities, and omitted transfer-profile fields.
+> The numeric checks below passed, but do not establish complete data correctness.
+
 ## Scope and method
 
 Every current original from `raw_screenshots/1.png` through `2240.png` was read
