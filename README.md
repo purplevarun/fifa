@@ -241,6 +241,11 @@ zero coverage warnings does not mean every screenshot yielded a record.
 
 ### Full-archive audit
 
+`./run process` rebuilds the database and dashboard export; it does **not** run
+the audit automatically. After processing finishes, generate a fresh JSON report
+with the separate command below. `processing/OCR_AUDIT.md` is a maintained summary,
+not an automatically generated processing output.
+
 ```sh
 python3 -m processing.audit --output processing/data/ocr-audit.json
 ```
@@ -276,9 +281,13 @@ names; tokens spanning a neighbouring score are excluded. Original readings and
 all retry evidence remain available.
 
 An audit exits nonzero for unresolved source/field issues or numeric disagreements;
-it does not rewrite them to make checks pass. For example, a negative count shown
-by the game is retained in OCR evidence while its non-negative statistic remains
-unknown. Neither successful import nor this automated audit is manual visual
+it does not rewrite them to make checks pass. The archive owner's confirmed rule
+stores the absolute value of negative displayed tackle counts, retaining the
+original values and adjustment basis in OCR evidence. Displayed percentages are
+checked against the original counts, not silently rewritten after normalization.
+Accepted contract-panel transfers, including pre-contracts, are treated as
+completed under the owner's confirmed archive rule; exact completion dates are
+not invented. Neither successful import nor this automated audit is manual visual
 verification. Reports in `processing/data/` are deleted by the next `./run process`;
 copy any report or audit database outside that folder to retain it.
 
