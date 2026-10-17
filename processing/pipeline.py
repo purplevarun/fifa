@@ -20,8 +20,13 @@ from .database import (
     validate_database,
 )
 from .identifiers import is_uuid, normalize_references
+from .normalization import (
+    CLUB_NAMES,
+    canonical_club_name,
+    normalize_nationality,
+    resolve_nationality,
+)
 from .reconciliation import player_match_goals, reconcile_totals
-
 
 BOOLEAN_FIELDS = {"is_preseason", "extra_time", "started"}
 NON_MATCH_SCREEN_TYPES = {
@@ -45,6 +50,7 @@ CONTEXT_FIELDS = {
     "player",
     "player_id",
     "nationality",
+    "nationality_basis",
     "club",
     "season",
     "competition",
@@ -431,48 +437,39 @@ def normalized_name(value):
     return " ".join(value.split())
 
 
-def normalize_nationality(value):
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError("A nationality must be a string")
-    nationality = " ".join(value.split())
-    if not nationality:
-        return None
-    nationality = re.sub(
-        r"^(?:Age\s+\d+\s+\d+\s+|Age\s+\d+\s+|ge\s+\d+\s+Ip\s+)",
-        "",
-        nationality,
-        flags=re.IGNORECASE,
-    )
-    nationality = re.sub(r"^(?:\d+\s+)+", "", nationality)
-    nationality = re.sub(r"^\s*\d+\s+", "", nationality)
-    nationality = re.sub(r"\s+\d+\s+", " ", nationality)
-    nationality = re.sub(r"\s+\d+$", "", nationality)
-    if country := re.search(r"([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)$", nationality):
-        nationality = country.group(1)
-    return nationality or None
-
-
 def ensure_club(connection, name):
-    name = normalized_name(name)
-    alias = name.casefold()
-    existing = connection.execute(
-        "SELECT club_id FROM club_aliases WHERE alias = ?", (alias,)
-    ).fetchone()
-    if existing:
-        return existing["club_id"]
-    existing = connection.execute(
-        "SELECT id FROM clubs WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
+    raw_name = normalized_name(name)
+    name = canonical_club_name(raw_name)
+    aliases = {raw_name.casefold(), name.casefold()}
+    matches = [
+        row
+        for row in connection.execute("SELECT id, name FROM clubs")
+        if canonical_club_name(row["name"]).casefold() == name.casefold()
+    ]
+    identifiers = {row["id"] for row in matches}
+    for alias in aliases:
+        existing = connection.execute(
+            "SELECT club_id FROM club_aliases WHERE alias = ?", (alias,)
+        ).fetchone()
+        if existing:
+            identifiers.add(existing["club_id"])
+    if len(identifiers) > 1:
+        raise ValueError(
+            f"Duplicate club identity for {name}; rebuild or explicitly merge the existing records first"
+        )
     club_id = (
-        existing["id"]
-        if existing
+        next(iter(identifiers))
+        if identifiers
         else insert_entity(connection, "clubs", {"name": name})
     )
-    connection.execute(
-        "INSERT INTO club_aliases(alias, club_id) VALUES (?, ?)", (alias, club_id)
-    )
+    if matches and name in CLUB_NAMES.values():
+        aliases.update(row["name"].casefold() for row in matches)
+        connection.execute("UPDATE clubs SET name = ? WHERE id = ?", (name, club_id))
+    for alias in aliases:
+        connection.execute(
+            "INSERT OR IGNORE INTO club_aliases(alias, club_id) VALUES (?, ?)",
+            (alias, club_id),
+        )
     return club_id
 
 
@@ -504,15 +501,16 @@ def ensure_player(connection, record):
         "INSERT OR IGNORE INTO player_aliases(alias, player_id) VALUES (?, ?)",
         (alias, player_id),
     )
-    if record.get("nationality"):
-        nationality = normalize_nationality(record["nationality"])
-        if nationality is None:
-            return player_id
-        current = connection.execute(
-            "SELECT nationality FROM players WHERE id = ?", (player_id,)
-        ).fetchone()[0]
-        if current is not None and current != nationality:
-            raise ValueError(f"Conflicting nationality for {name}")
+    current = connection.execute(
+        "SELECT name, nationality FROM players WHERE id = ?", (player_id,)
+    ).fetchone()
+    saved = normalize_nationality(current["nationality"])
+    nationality = normalize_nationality(record.get("nationality"))
+    if nationality and saved and saved != nationality:
+        raise ValueError(f"Conflicting nationality for {name}")
+    if nationality is None:
+        nationality = saved or resolve_nationality(current["name"])[0]
+    if nationality:
         connection.execute(
             "UPDATE players SET nationality = ? WHERE id = ?", (nationality, player_id)
         )

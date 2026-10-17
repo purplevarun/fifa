@@ -6,7 +6,13 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from . import EXTRACTOR_VERSION
-
+from .normalization import (
+    POSITIONS,
+    canonical_club_name,
+    normalize_nationality,
+    normalize_positions,
+    resolve_nationality,
+)
 
 BASE_WIDTH = 1366
 BASE_HEIGHT = 768
@@ -284,26 +290,27 @@ def parse_header(text):
 
 
 def parse_profile_details(text):
-    positions = r"(?:GK|RWB|LWB|CDM|CAM|CB|RB|LB|CM|RM|LM|RW|LW|CF|ST|RF|LF)"
     matched = re.search(
-        rf"(?<![A-Za-z])({positions}(?:\s*/\s*{positions})*)\s*[|Il]?\s*"
-        r"Age\s*:?\s*(\d{1,2})\s*(?:\||[Il](?=\s|>))?\s*"
-        r"(?:[>●•]\s*)?([A-Za-z][A-Za-z .'-]+)$",
+        rf"(?<![A-Za-z])({POSITIONS}(?:\s*/\s*{POSITIONS})*)\s*[|Il]?\s*"
+        r"Age\s*:?\s*(\d{1,2})(?!\d)(.*)$",
         text.strip(),
         re.IGNORECASE,
     )
     if not matched:
         return {}
-    return {
+    details = {
         "displayed_position": re.sub(r"\s+", "", matched.group(1)).upper(),
         "age": int(matched.group(2)),
-        "nationality": matched.group(3).strip(),
     }
+    if country := normalize_nationality(matched.group(3)):
+        details["nationality"] = country
+    return details
 
 
 def club_name(text):
-    if compact(text) == "nottscounty":
-        return "Notts County"
+    if not text.strip():
+        return None
+    text = canonical_club_name(text)
     words = text.strip().title().split()
     return (
         " ".join(
@@ -352,7 +359,9 @@ def parse_calendar_month(text):
     return None
 
 
-def parse_news_event(title, body="", announced_on=None, observed_on=None):
+def parse_news_event(
+    title, body="", announced_on=None, observed_on=None, *, sidebar=False
+):
     title = news_title(title)
     normalized = compact(title)
     if any(
@@ -460,6 +469,10 @@ def parse_news_event(title, body="", announced_on=None, observed_on=None):
             parse_header(destination.group(1))["competition"] if destination else None
         )
     elif golden_boot:
+        # A neighboring headline is not evidence that its winner belongs in the
+        # managed squad. Keep selected articles and global annual awards intact.
+        if sidebar:
+            return None
         event_type = "golden_boot"
         player = golden_boot.group(1).strip()
     elif award:
@@ -826,6 +839,22 @@ class ScreenshotExtractor:
             )
             for record in records:
                 record["player"] = name
+        for record in records:
+            if not record.get("player"):
+                continue
+            country, basis = resolve_nationality(
+                record["player"], record.get("nationality")
+            )
+            if country:
+                record["nationality"] = country
+            if basis:
+                record["nationality_basis"] = basis
+                evidence.setdefault("nationality_fallbacks", []).append(
+                    {"player": record["player"], "nationality": country, **basis}
+                )
+                issues.append(
+                    f"Nationality for {record['player']} supplied by {basis['method']}; not an on-screen OCR reading."
+                )
         evidence["fields"] = fields
         issues.extend(
             f"Negative count displayed for {field}: {reading['raw_text']!r}; retained as OCR evidence, not replaced with zero."
@@ -865,6 +894,13 @@ class ScreenshotExtractor:
                 "completion": (685, 385, 1054, 453),
                 "status": (865, 510, 947, 565),
             },
+        )
+        fields.update(
+            detected_fields(
+                tokens,
+                {"profile_details": (697, 310, 1120, 339)},
+                single_line=True,
+            )
         )
         text = {field: reading["raw_text"] for field, reading in fields.items()}
         completed = "andhejustjoinedtheteam" in compact(text["completion"])
@@ -929,6 +965,8 @@ class ScreenshotExtractor:
             if transfer_type == "loan"
             else None,
         }
+        if country := parse_profile_details(text["profile_details"]).get("nationality"):
+            record["nationality"] = country
         if not completed:
             record["context_basis"] = (
                 "User-confirmed archive rule: accepted contract-panel transfers are completed "
@@ -1026,7 +1064,7 @@ class ScreenshotExtractor:
         for headline, announced_on in stories:
             if selected and compact(news_title(headline)) == compact(news_title(title)):
                 continue
-            record = parse_news_event(headline, announced_on=announced_on)
+            record = parse_news_event(headline, announced_on=announced_on, sidebar=True)
             if record:
                 records.append(record)
         issues = []
@@ -1472,9 +1510,10 @@ class ScreenshotExtractor:
             ),
             "overall": parse_integer(fields["overall"]["raw_text"]),
             "age": parse_integer(fields["age"]["raw_text"]),
-            "displayed_position": fields["displayed_position"]["raw_text"].strip()
-            or None,
-            "nationality": fields["nationality"]["raw_text"].strip() or None,
+            "displayed_position": normalize_positions(
+                fields["displayed_position"]["raw_text"]
+            ),
+            "nationality": normalize_nationality(fields["nationality"]["raw_text"]),
             "snapshot_kind": "first_observed",
             "observed_on": None,
             "date_from": None,

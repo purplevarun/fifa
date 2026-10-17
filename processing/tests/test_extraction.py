@@ -186,6 +186,29 @@ class ParsingTests(unittest.TestCase):
         self.assertIsNone(record["period"])
         self.assertIsNone(record["season"])
 
+    def test_sidebar_awards_ignore_incidental_golden_boot_but_keep_global_poty(self):
+        self.assertIsNone(
+            parse_news_event(
+                "Zoko Wins Golden Boot", announced_on="2019-05-04", sidebar=True
+            )
+        )
+        record = parse_news_event(
+            "Player of the Year Announced Lionel Messi",
+            announced_on="2019-12-12",
+            sidebar=True,
+        )
+        self.assertEqual(record["event_type"], "player_of_the_year")
+        self.assertEqual(record["player"], "Lionel Messi")
+        self.assertEqual(record["period"], "2019")
+        foreign = parse_news_event(
+            "Player of the Year Announced",
+            "Other FC's Visiting Player has been named the Player of the Year.",
+            announced_on="2020-12-12",
+        )
+        self.assertEqual(foreign["player"], "Visiting Player")
+        self.assertEqual(foreign["club"], "Other FC")
+        self.assertEqual(foreign["event_type"], "player_of_the_year")
+
     def test_annual_award_article_uses_an_explicit_club_without_merging_it_into_the_name(
         self,
     ):
@@ -485,17 +508,31 @@ class NonMatchExtractionTests(unittest.TestCase):
 
     def test_other_article_does_not_supply_golden_boot_competition(self):
         records, fields, issues = self.extractor.extract_news(
-            self.news_tokens("Zoko Wins Golden Boot", body="")
+            self.news_tokens("King Wins Golden Boot", body="")
         )
         award = next(
             record for record in records if record["event_type"] == "golden_boot"
         )
-        self.assertEqual(award["player"], "Zoko")
+        self.assertEqual(award["player"], "King")
         self.assertIsNone(award["competition"])
         self.assertIsNone(award["club"])
         self.assertTrue(
             any("Competition or season is not stated" in issue for issue in issues)
         )
+
+    def test_unselected_golden_boot_headline_does_not_create_a_player_event(self):
+        tokens = self.news_tokens() + ocr_tokens(
+            [
+                ("Zoko Wins Golden Boot", 105, 435, 353, 461),
+                ("04/05/2019", 105, 475, 187, 490),
+            ]
+        )
+        records, fields, _issues = self.extractor.extract_news(tokens)
+        self.assertTrue(any(record["player"] == "King" for record in records))
+        self.assertFalse(
+            any(record["event_type"] == "golden_boot" for record in records)
+        )
+        self.assertIn("Zoko", fields["news.3.title"]["raw_text"])
 
     def dashboard_award(self, headlines, calendar="DEC 2019", fixture_date=""):
         self.extractor.recognize = Mock(
@@ -824,7 +861,7 @@ class ScreenshotTests(unittest.TestCase):
             "records"
         ]
         by_type = {record["event_type"]: record for record in records}
-        self.assertEqual(len(records), 3)
+        self.assertEqual(len(records), 2)
         self.assertEqual(
             by_type["goalkeeper_of_the_competition"]["player"], "Aaron Ramsdale"
         )
@@ -833,8 +870,8 @@ class ScreenshotTests(unittest.TestCase):
         )
         self.assertEqual(by_type["champion"]["competition"], "EFL League Two")
         self.assertEqual(by_type["champion"]["club"], "Notts County")
-        self.assertEqual(by_type["golden_boot"]["player"], "Zoko")
-        self.assertIsNone(by_type["golden_boot"]["competition"])
+        self.assertNotIn("golden_boot", by_type)
+        self.assertFalse(any(record.get("player") == "Zoko" for record in records))
 
     def test_tournament_winner_does_not_invent_a_fixture_or_season(self):
         extraction = self.extractor.extract(self.root / "raw_screenshots/80.png")
