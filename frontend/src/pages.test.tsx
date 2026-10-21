@@ -71,6 +71,40 @@ describe("local stats pages", () => {
 	});
 
 	it.each([
+		{ result: "unconfirmed_cutoff", label: "Cutoff unconfirmed" },
+		{ result: "partial_comparison", label: "Partial" },
+	])("distinguishes $result in verification rows", ({ result, label }) => {
+		const verification = createModel({
+			...fixture,
+			season_reconciliation: {
+				...fixture.season_reconciliation,
+				comparisons: fixture.season_reconciliation.comparisons.map(
+					(row) => ({ ...row, result, metrics: {} }),
+				),
+			},
+		});
+		const html = renderToStaticMarkup(
+			<MemoryRouter initialEntries={["/audit"]}>
+				<CareerContext
+					value={{
+						model: verification,
+						filters: defaultFilters,
+						matches: verification.matches,
+					}}
+				>
+					<Audit />
+				</CareerContext>
+			</MemoryRouter>,
+		);
+		expect(html).toContain(`>${label}<`);
+		expect(html).not.toContain(
+			result === "unconfirmed_cutoff"
+				? ">Partial<"
+				: ">Cutoff unconfirmed<",
+		);
+	});
+
+	it.each([
 		{
 			code: "missing_player_core_fields",
 			title: "Missing player statistics",

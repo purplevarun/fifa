@@ -329,6 +329,26 @@ class NameRecognitionTests(unittest.TestCase):
         self.assertEqual(reading["initial_reading"]["raw_text"], "HewittO")
         self.assertEqual(reading["full_image_reading"], "Hewitt")
 
+    def test_enlarged_name_crops_keep_the_two_reading_confidence_requirement(self):
+        low = {
+            f"last_name.{padding}": {"raw_text": "Hewitt", "confidence": 0.78}
+            for padding in (0, 2, 4)
+        }
+        high = {
+            f"last_name.{padding}": {"raw_text": "Hewitt", "confidence": 0.87}
+            for padding in (0, 2, 4)
+        }
+        self.extractor.recognize = Mock(side_effect=[low, high])
+
+        self.extractor.refine_name_fields(self.image, self.tokens, self.fields)
+
+        reading = self.fields["last_name"]
+        self.assertEqual(reading["raw_text"], "Hewitt")
+        self.assertEqual(reading["initial_reading"]["raw_text"], "HewittO")
+        self.assertEqual(len(reading["name_retry"]), 6)
+        enlarged = self.extractor.recognize.call_args_list[1].args[0]
+        self.assertEqual(enlarged.size, (2732, 1536))
+
     def test_disagreeing_or_low_confidence_name_retry_is_not_used(self):
         for text, confidence in (("HewittO", 0.99), ("Hewitt", 0.74), ("Hewitt", 0.81)):
             with self.subTest(text=text, confidence=confidence):
@@ -478,6 +498,49 @@ class NonMatchExtractionTests(unittest.TestCase):
             ]
         )
 
+    def test_senior_contract_email_requires_dated_acceptance(self):
+        accepted = "I'm very happy to accept your contract offer with the senior team."
+        for date_text, subject, body, expected in (
+            ("03/02/2021", "[info] Contract Accepted", accepted, True),
+            ("", "[info] Contract Accepted", accepted, False),
+            ("03/02/2021", "[info] Contract Rejected", accepted, False),
+            (
+                "03/02/2021",
+                "[info] Contract Accepted",
+                "I need more time to decide.",
+                False,
+            ),
+        ):
+            with self.subTest(date=date_text, subject=subject, body=body):
+                tokens = ocr_tokens(
+                    [
+                        ("Notts County", 151, 89, 262, 106),
+                        (date_text, 802, 218, 908, 235),
+                        ("Test Player", 802, 241, 949, 259),
+                        ("Kedia, Mr.", 802, 260, 914, 276),
+                        (subject, 802, 294, 1093, 315),
+                        (body, 705, 391, 1259, 432),
+                        ("Other Player", 156, 208, 339, 229),
+                    ]
+                )
+                records, _fields, _issues = self.extractor.extract_inbox(tokens)
+                if not expected:
+                    self.assertEqual(records, [])
+                    continue
+                self.assertEqual(len(records), 1)
+                record = records[0]
+                self.assertEqual(record["player"], "Test Player")
+                self.assertEqual(record["to_club"], "Notts County")
+                self.assertEqual(record["transfer_type"], "permanent")
+                self.assertEqual(record["effective_on"], "2021-02-03")
+                for field in (
+                    "from_club",
+                    "fee_minor",
+                    "weekly_wage_minor",
+                    "contract_months",
+                ):
+                    self.assertIsNone(record.get(field))
+
     def test_news_date_comes_from_matching_headline_not_first_story(self):
         records, fields, issues = self.extractor.extract_news(self.news_tokens())
         award = next(
@@ -492,6 +555,53 @@ class NonMatchExtractionTests(unittest.TestCase):
             sum(record["event_type"] == "player_of_the_month" for record in records), 1
         )
         self.assertIn("news.2.announced_on", fields)
+
+    def test_transfer_rumour_retains_only_explicit_league_assists(self):
+        for body, expected in (
+            (
+                (
+                    "Few players are more in demand than Notts County's Test Player. "
+                    "He currently leads the league in assists with 12. "
+                    "Racing Club have reportedly approached Notts County."
+                ),
+                True,
+            ),
+            ("Racing Club could offer $12,000,000 for the player.", False),
+        ):
+            with self.subTest(body=body):
+                records, _fields, _issues = self.extractor.extract_news(
+                    ocr_tokens(
+                        [
+                            (
+                                "Assist Leader Test Player Targeted by",
+                                955,
+                                232,
+                                1260,
+                                250,
+                            ),
+                            ("Racing Club", 955, 265, 1170, 283),
+                            (body, 955, 312, 1260, 490),
+                        ]
+                    )
+                )
+                if not expected:
+                    self.assertEqual(records, [])
+                    continue
+                self.assertEqual(len(records), 1)
+                record = records[0]
+                self.assertEqual(record["type"], "player_competition_snapshot")
+                self.assertEqual(record["player"], "Test Player")
+                self.assertEqual(record["club"], "Notts County")
+                self.assertEqual(record["assists"], 12)
+                self.assertEqual(record["competition_kind"], "league")
+                for field in (
+                    "competition",
+                    "season",
+                    "observed_on",
+                    "appearances",
+                    "goals",
+                ):
+                    self.assertIsNone(record.get(field))
 
     def test_unknown_news_date_is_not_replaced_with_neighbor_date(self):
         records, fields, issues = self.extractor.extract_news(
@@ -743,6 +853,7 @@ class ScreenshotTests(unittest.TestCase):
             (352, "Elliott Hewitt", True),
             (914, "Leo Ostigard", True),
             (1292, "Leo Ostigard", False),
+            (2508, "George Baker", True),
         ):
             with self.subTest(sequence=sequence):
                 extraction = self.extractor.extract(

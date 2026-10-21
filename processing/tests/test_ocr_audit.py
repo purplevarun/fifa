@@ -221,6 +221,24 @@ class AuditNumericTests(unittest.TestCase):
         self.assertEqual(visible_field_issues("player_leaderboard", [record]), [])
         self.assertTrue(visible_field_issues("squad", [record]))
 
+    def test_news_total_requires_only_the_displayed_assist_count(self):
+        record = {
+            "type": "player_competition_snapshot",
+            "player": "Kubo",
+            "club": "Notts County",
+            "scope": "competition",
+            "competition": None,
+            "competition_kind": "league",
+            "assists": 12,
+        }
+        self.assertEqual(visible_field_issues("news", [record]), [])
+        self.assertTrue(visible_field_issues("squad", [record]))
+        for value in (None, -1, "twelve"):
+            with self.subTest(value=value):
+                self.assertTrue(
+                    visible_field_issues("news", [{**record, "assists": value}])
+                )
+
     def test_inconsistent_counts_are_reported_not_corrected(self):
         record = {
             "type": "player_match",

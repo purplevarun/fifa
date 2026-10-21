@@ -130,7 +130,12 @@ function Shell({
 					</div>
 					<div className="sidebar-season">
 						<span className="status-dot" />
-						FIFA 19<span className="muted">2018 - 2020</span>
+						FIFA 19
+						<span className="muted">
+							{model.matches.length
+								? `${model.matches[0].played_on.slice(0, 4)} - ${model.matches.at(-1)?.played_on.slice(0, 4)}`
+								: "No matches"}
+						</span>
 					</div>
 					<nav aria-label="Main navigation">
 						{navigation.map(

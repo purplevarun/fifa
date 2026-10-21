@@ -696,24 +696,41 @@ class ScreenshotExtractor:
                 max(point[0] for point in points) * BASE_WIDTH,
                 max(point[1] for point in points) * BASE_HEIGHT,
             )
-            retries = self.recognize(
-                image,
-                {
-                    f"{field}.{padding}": (
-                        max(0, bounds[0] - padding),
-                        max(0, bounds[1] - padding),
-                        min(BASE_WIDTH, bounds[2] + padding),
-                        min(BASE_HEIGHT, bounds[3] + padding),
-                    )
-                    for padding in (0, 2, 4)
-                },
-            )
+            regions = {
+                f"{field}.{padding}": (
+                    max(0, bounds[0] - padding),
+                    max(0, bounds[1] - padding),
+                    min(BASE_WIDTH, bounds[2] + padding),
+                    min(BASE_HEIGHT, bounds[3] + padding),
+                )
+                for padding in (0, 2, 4)
+            }
+            retries = self.recognize(image, regions)
             agreeing = [
                 reading
                 for reading in retries.values()
                 if reading["confidence"] >= max(0.75, original["confidence"] + 0.015)
                 and compact(reading["raw_text"]) == compact(detected)
             ]
+            if len(agreeing) < 2 and field in {"first_name", "last_name"}:
+                enlarged = self.recognize(
+                    image.resize(
+                        (image.width * 2, image.height * 2),
+                        Image.Resampling.LANCZOS,
+                    ),
+                    regions,
+                )
+                retries = {
+                    **retries,
+                    **{f"{key}.enlarged": value for key, value in enlarged.items()},
+                }
+                agreeing = [
+                    reading
+                    for reading in enlarged.values()
+                    if reading["confidence"]
+                    >= max(0.75, original["confidence"] + 0.015)
+                    and compact(reading["raw_text"]) == compact(detected)
+                ]
             if len(agreeing) >= 2:
                 retry = max(agreeing, key=lambda reading: reading["confidence"])
                 fields[field] = {
@@ -1061,6 +1078,39 @@ class ScreenshotExtractor:
             next(iter(matching_dates)) if len(matching_dates) == 1 else None,
         )
         records = [selected] if selected else []
+        assist_leader = re.match(
+            r"Assist Leader (.+?) Targeted by\b", news_title(title), re.IGNORECASE
+        )
+        assist_total = re.search(
+            r"\bcurrently leads the league in assists with (\d+)\b",
+            body,
+            re.IGNORECASE,
+        )
+        if assist_leader and assist_total:
+            player = assist_leader.group(1).strip()
+            current_club = re.search(
+                r"\bin demand than (.+?)['\u2019]s\s+" + re.escape(player) + r"\b",
+                body,
+                re.IGNORECASE,
+            )
+            if current_club:
+                records.append(
+                    {
+                        "type": "player_competition_snapshot",
+                        "player": player,
+                        "club": club_name(current_club.group(1)),
+                        "competition": None,
+                        "competition_kind": "league",
+                        "scope": "competition",
+                        "season": None,
+                        "observed_on": next(iter(matching_dates))
+                        if len(matching_dates) == 1
+                        else None,
+                        "snapshot_kind": "in_season",
+                        "assists": int(assist_total.group(1)),
+                        "date_basis": "Selected news article explicitly reports current league assists; transfer speculation is not a completed transfer.",
+                    }
+                )
         for headline, announced_on in stories:
             if selected and compact(news_title(headline)) == compact(news_title(title)):
                 continue
@@ -1073,6 +1123,8 @@ class ScreenshotExtractor:
                 "No named award winner or championship found; predictions and shortlists are not awards."
             )
         for record in records:
+            if record["type"] != "competition_event":
+                continue
             if record["event_type"] == "player_of_the_year":
                 if not record["period"]:
                     issues.append("The Player of the Year award year is not stated.")
@@ -1091,19 +1143,47 @@ class ScreenshotExtractor:
             tokens,
             {
                 "effective_on": (790, 216, 960, 238),
+                "sender": (795, 237, 1268, 255),
                 "subject": (795, 289, 1268, 321),
                 "body": (697, 338, 1270, 641),
                 "club": (145, 84, 276, 114),
             },
         )
         body = fields["body"]["raw_text"]
+        effective_on = parse_news_date(fields["effective_on"]["raw_text"])
+        sender = fields["sender"]["raw_text"].strip()
+        club = club_name(fields["club"]["raw_text"])
+        if (
+            "contractaccepted" in compact(fields["subject"]["raw_text"])
+            and re.search(
+                r"\baccept your contract offer with the senior team\b",
+                body,
+                re.IGNORECASE,
+            )
+            and effective_on
+            and len(sender.split()) >= 2
+            and club
+        ):
+            return (
+                [
+                    {
+                        "type": "player_transfer",
+                        "player": sender,
+                        "to_club": club,
+                        "transfer_type": "permanent",
+                        "effective_on": effective_on,
+                        "date_basis": "Dated player email confirms acceptance of a senior-team contract; financial terms and former club are not shown.",
+                    }
+                ],
+                fields,
+                [],
+            )
         loan = re.search(
             r"(?:Mr\.\s*[^,]+,?\s*)?(.+?)\s+has\s+accepted\s+a\s+"
             r"(One|Two|\d+)[- ]year\s+loan\s+move\s+to\s+(.+?)\.",
             body,
             re.IGNORECASE,
         )
-        effective_on = parse_news_date(fields["effective_on"]["raw_text"])
         if (
             not loan
             or "loanedout" not in compact(fields["subject"]["raw_text"])
@@ -1113,7 +1193,9 @@ class ScreenshotExtractor:
             return (
                 [],
                 fields,
-                ["No dated, completed loan confirmed in the selected email."],
+                [
+                    "No dated senior-contract acceptance or completed loan confirmed in the selected email."
+                ],
             )
         years = {"one": 1, "two": 2}.get(loan.group(2).casefold())
         years = years or parse_integer(loan.group(2))

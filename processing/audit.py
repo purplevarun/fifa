@@ -228,8 +228,10 @@ class FieldChecks:
                 "appearances",
                 *(field for field in ("goals", "assists") if field in record),
             )
+        elif screen_type == "news":
+            metrics = ("assists",)
         self.required(record, ("player", "club", *metrics))
-        if record.get("scope") == "competition":
+        if record.get("scope") == "competition" and screen_type != "news":
             self.required(record, ("competition",))
         if screen_type != "player_leaderboard" and record.get("appearances", 0):
             self.required(record, ("average_rating",))

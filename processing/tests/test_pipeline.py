@@ -1861,6 +1861,91 @@ class AutomaticImportTests(DatabaseTestCase):
         ).fetchone()[0]
         self.assertEqual(winner, "Notts County")
 
+    def test_news_assist_total_uses_unique_preceding_league_not_nearby_cup(self):
+        self.extract(
+            ("match_facts", [{**self.match, "competition": "EFL League Two"}]),
+            ("player_performance", [self.player]),
+            ("match_facts", [{**self.match, "played_on": "2018-07-05"}]),
+            ("player_performance", [self.player]),
+            (
+                "news",
+                [
+                    {
+                        "type": "player_competition_snapshot",
+                        "player": "Kewell",
+                        "club": "Notts County",
+                        "competition_kind": "league",
+                        "scope": "competition",
+                        "snapshot_kind": "in_season",
+                        "assists": 12,
+                    }
+                ],
+            ),
+        )
+
+        result = import_pending(self.connection)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 5)
+        snapshot = self.connection.execute(
+            "SELECT player.name, competition.name, season.label, snapshot.assists, "
+            "snapshot.observed_on, snapshot.appearances, snapshot.goals "
+            "FROM player_competition_snapshots snapshot "
+            "JOIN players player ON player.id = snapshot.player_id "
+            "JOIN competition_seasons edition ON edition.id = snapshot.competition_season_id "
+            "JOIN competitions competition ON competition.id = edition.competition_id "
+            "JOIN seasons season ON season.id = snapshot.season_id"
+        ).fetchone()
+        self.assertEqual(
+            tuple(snapshot),
+            ("Harry Kewell", "EFL League Two", "2018/19", 12, None, None, None),
+        )
+        self.assertEqual(import_pending(self.connection)["imported_sources"], 0)
+
+    def test_news_assist_total_does_not_guess_between_leagues(self):
+        self.extract(
+            ("match_facts", [{**self.match, "competition": "EFL League Two"}]),
+            ("player_performance", [self.player]),
+            (
+                "match_facts",
+                [
+                    {
+                        **self.match,
+                        "competition": "EFL League One",
+                        "played_on": "2018-07-05",
+                    }
+                ],
+            ),
+            ("player_performance", [self.player]),
+            (
+                "news",
+                [
+                    {
+                        "type": "player_competition_snapshot",
+                        "player": "Kewell",
+                        "club": "Notts County",
+                        "competition_kind": "league",
+                        "scope": "competition",
+                        "snapshot_kind": "in_season",
+                        "assists": 12,
+                    }
+                ],
+            ),
+        )
+
+        result = import_pending(self.connection)
+
+        self.assertEqual(result["imported_sources"], 4)
+        self.assertIn(
+            "2 matching preceding league", result["skipped_sources"][0]["reason"]
+        )
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT COUNT(*) FROM player_competition_snapshots"
+            ).fetchone()[0],
+            0,
+        )
+
     def test_monthly_award_uses_player_league_in_award_month_not_nearby_cup(self):
         self.extract(
             ("match_facts", [{**self.match, "competition": "EFL League Two"}]),

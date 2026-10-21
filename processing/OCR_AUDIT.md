@@ -1,4 +1,87 @@
-# Screenshot OCR audit — 17 October 2026
+# Screenshot OCR audit
+
+## Current audit: 21 October 2026
+
+The 297 new screenshots were appended, in original capture-number order, as
+`raw_screenshots/2241.png` through `2537.png`. The archive now contains exactly
+`1.png` through `2537.png`; every existing and incoming image retained its SHA-256
+hash. The emptied `new_screenshots` directory was removed.
+
+This audit did **not** call `./run process`. All 2,537 originals received fresh
+RapidOCR extraction into an external staging database. After targeted extraction
+fixes, canonical records were rebuilt from that fresh OCR evidence without copying
+old approvals. A separate Apple Vision pass read every original and numeric crop
+locally. Image hashes were checked before comparing the two readers.
+
+| Check | Result |
+| --- | ---: |
+| Distinct readable originals / extracted / imported | 2,537 / 2,537 / 2,537 |
+| OCR errors / failed imports / database errors | 0 / 0 / 0 |
+| Expected-field issues / match-coverage warnings | 0 / 0 |
+| Extracted numeric fields | 55,892 |
+| Numeric fields agreeing with independent OCR | 54,997 |
+| Remaining numeric fields visually checked by the assistant | 895 |
+| Unchecked extracted numeric fields / unresolved numeric differences | 0 / 0 |
+| Chronological cumulative-count checks | 449 match, 0 mismatch |
+| Unshown cumulative metrics not comparable | 28 |
+| Python tests including real-image regressions / frontend tests | 219 / 54 passed |
+
+Independent evidence selection used one consistent rule for all fields: prefer
+an isolated whole-image reading, otherwise use the isolated crop. Selection did
+not depend on whether the value agreed with the primary OCR. Eight of the 55,005
+selected independent readings disagreed; the original crops confirmed the primary
+values. Those eight and all 887 unmatched fields were visually inspected on
+labelled crop sheets. The audit retains the raw disagreements separately from
+their visual resolution; no screenshot or numeric value was changed to force a
+match.
+
+Extractor 1.4.4 fixes three omissions found during this audit:
+
+- Screenshot 2494 contributes Kubo's explicitly reported 12 league assists, not
+  the article's speculative transfer. The league is inferred only from a unique
+  preceding player/club/season league context; unshown metrics stay unknown.
+- Screenshot 2495 records George Baker's dated senior-contract acceptance on
+  3 February 2021. Former club and financial terms are not invented.
+- Screenshot 2508 now reads George Baker rather than BakerO. Enlarged tight-name
+  crops retain the existing confidence threshold and require two agreeing readings.
+  The final canonical database contains one George Baker identity.
+
+The published local database has 169 matches, 2,253 player appearances, 30 players,
+2,279 player snapshots, 159 competition snapshots, nine transfers, and 24 events.
+The latest match is 20 February 2021. Every value in the previously saved 148
+matches and 1,981 appearances was preserved, comparing natural fixture/player keys
+rather than regenerated entity UUIDs. SQLite integrity and relationships passed.
+The local API and desktop/mobile browser checks passed at 1440x1000 and 390x844:
+the corrected player has one transfer and one appearance, verification labels are
+accurate, mobile navigation works, and there is no page-level horizontal overflow.
+The sidebar year range now follows the recorded match dates instead of stopping
+at the previously hardcoded 2020.
+
+### Why the website showed Partial
+
+All 159 standard season-reconciliation rows have `unconfirmed_cutoff`, not
+`partial_comparison`: their cumulative screenshots lack exact observation dates.
+The website previously mapped both statuses to **Partial**; it now displays
+**Cutoff unconfirmed** for the undated rows. The separate chronological audit
+checks counts against preceding captures without inventing dates or claiming
+date-based reconciliation. No extra match screenshots are indicated by the current
+coverage checks. Exact cutoff dates would be needed to enable the date-based
+comparison; they are not needed to retain the visible statistics.
+
+### Scope and retained evidence
+
+Complete checking of extracted numeric cells is **not a guarantee that every text
+field, unshown fact, inferred context, or agreement between OCR readers is
+infallible**. The assistant reviewed the remaining numeric crops, not every pixel
+of every screenshot. Unsupported off-screen information remains unknown.
+
+The active database and static dashboard export were updated locally. The current
+combined report is `processing/data/ocr-audit.json`. The consistent pre-publication
+backup, staging databases, independent readings, visual-review manifest, all crop
+sheets, and final reports are retained outside the repository in
+`../fifa-career-mode-backups/2026-10-21-independent-audit/`.
+
+## Historical audit: 17 October 2026
 
 > Follow-up: [Dashboard and screenshot review](DASHBOARD_REVIEW.md) found malformed
 > profile text, seven split club identities, and omitted transfer-profile fields.

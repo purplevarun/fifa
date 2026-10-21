@@ -1123,6 +1123,40 @@ def normalize_goalkeeper(connection, record):
         raise ValueError("Ambiguous shootout-inclusive goalkeeper count")
 
 
+def resolve_snapshot_league(connection, record, sequence):
+    if (
+        record.get("type") != "player_competition_snapshot"
+        or record.get("scope") != "competition"
+        or record.get("competition")
+        or record.get("competition_kind") != "league"
+    ):
+        return
+    editions = connection.execute(
+        "SELECT DISTINCT competition.name FROM player_matches appearance "
+        "JOIN matches fixture ON fixture.id = appearance.match_id "
+        "JOIN competition_seasons edition ON edition.id = fixture.competition_season_id "
+        "JOIN competitions competition ON competition.id = edition.competition_id "
+        "JOIN seasons season ON season.id = edition.season_id "
+        "JOIN clubs club ON club.id = appearance.club_id "
+        "WHERE appearance.player_id = ? AND season.label = ? "
+        "AND club.name = ? COLLATE NOCASE AND competition.kind = 'league' "
+        "AND EXISTS (SELECT 1 FROM match_sources link JOIN source_paths path "
+        "ON path.source_id = link.source_id WHERE link.match_id = fixture.id "
+        "AND path.present = 1 AND path.sequence < ?)",
+        (record.get("player_id"), record.get("season"), record.get("club"), sequence),
+    ).fetchall()
+    if len(editions) != 1:
+        raise ValueError(
+            f"Cannot determine the snapshot league for {record.get('player')!r}: "
+            f"{len(editions)} matching preceding league contexts"
+        )
+    record["competition"] = editions[0]["name"]
+    record["context_basis"] = (
+        f"League inferred from {record['player']}'s preceding appearances for "
+        f"{record['club']} in {record['season']}; no observation date inferred."
+    )
+
+
 def resolve_award_context(connection, record, records):
     if record.get("type") != "competition_event" or record.get("competition"):
         return
@@ -1404,6 +1438,7 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
                                     f"Season inferred from screenshot context: {context[1]}. "
                                     "No exact observation date inferred."
                                 )
+                    resolve_snapshot_league(connection, record, source["sequence"])
                     resolve_award_context(connection, record, document["records"])
                     if (
                         record.get("type") == "player_match"

@@ -173,7 +173,9 @@ export function CareerRecords() {
 	}
 	const scoringLeader = (metric: "braces" | "hat_tricks") => {
 		if (!seasonScoring.length) return "None";
-		const highest = Math.max(...[...careerScoring.values()].map((row) => row[metric]));
+		const highest = Math.max(
+			...[...careerScoring.values()].map((row) => row[metric]),
+		);
 		const names = [...careerScoring.values()]
 			.filter((row) => row[metric] === highest)
 			.map((row) => row.name)
@@ -407,7 +409,9 @@ export function CareerRecords() {
 					<SectionHeading title="Scoring feats" />
 					<SectionHeading title="Career totals">
 						<Pill>Most braces: {scoringLeader("braces")}</Pill>
-						<Pill>Most hat-tricks: {scoringLeader("hat_tricks")}</Pill>
+						<Pill>
+							Most hat-tricks: {scoringLeader("hat_tricks")}
+						</Pill>
 					</SectionHeading>
 					{careerScoring.size === 0 ? (
 						<Empty title="No braces or hat-tricks recorded" />
@@ -641,7 +645,9 @@ export function Audit() {
 						? "Matched"
 						: row.result === "mismatch"
 							? "Difference"
-							: "Partial"}
+							: row.result === "unconfirmed_cutoff"
+								? "Cutoff unconfirmed"
+								: "Partial"}
 				</Pill>
 			),
 		},
