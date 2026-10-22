@@ -8,17 +8,20 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { scoringFeats } from "./analytics";
 import { useCareer } from "./context";
 import type { Comparison, Dataset, MetricComparison, Row } from "./data";
 import {
 	dateLabel,
 	display,
 	downloadJson,
+	eventDescription,
 	label,
 	performanceMetric,
 	referenceLabel,
 	selectPerformances,
 } from "./data";
+import { HatTrickTable, ScoringCoverage } from "./overviewStats";
 import type { Column } from "./ui";
 import {
 	CareerLink,
@@ -34,7 +37,7 @@ import {
 } from "./ui";
 
 export function CareerRecords() {
-	const { model, filters } = useCareer();
+	const { model, filters, matches } = useCareer();
 	const [parameters, setParameters] = useSearchParams();
 	const tab = parameters.get("tab") === "events" ? "events" : "transfers";
 	const [selected, setSelected] = useState<Row | null>(null);
@@ -119,66 +122,16 @@ export function CareerRecords() {
 		current.awards += 1;
 		awardCounts.set(id, current);
 	}
-	const scoringRows = (matches: typeof model.matches) => {
-		const rows = new Map<
-			string,
-			{
-				id: string;
-				player_id: string;
-				name: string;
-				season: string;
-				braces: number;
-				hat_tricks: number;
-			}
-		>();
-		for (const performance of selectPerformances(model, matches)) {
-			if (
-				typeof performance.goals !== "number" ||
-				(performance.goals !== 2 && performance.goals < 3)
-			)
-				continue;
-			const match = model.matchById.get(performance.match_id);
-			if (!match) continue;
-			const season = match.season.label;
-			const id = `${performance.player_id}:${season}`;
-			const current = rows.get(id) ?? {
-				id,
-				player_id: performance.player_id,
-				name:
-					model.players.get(performance.player_id)?.name ??
-					"Unknown player",
-				season,
-				braces: 0,
-				hat_tricks: 0,
-			};
-			if (performance.goals === 2) current.braces += 1;
-			if (performance.goals >= 3) current.hat_tricks += 1;
-			rows.set(id, current);
-		}
-		return [...rows.values()];
-	};
-	const seasonScoring = scoringRows(model.matches);
-	const careerScoring = new Map<string, (typeof seasonScoring)[number]>();
-	for (const row of seasonScoring) {
-		const current = careerScoring.get(row.player_id) ?? {
-			...row,
-			id: row.player_id,
-			season: "",
-			braces: 0,
-			hat_tricks: 0,
-		};
-		current.braces += row.braces;
-		current.hat_tricks += row.hat_tricks;
-		careerScoring.set(row.player_id, current);
-	}
+	const feats = scoringFeats(model, matches);
+	const seasonScoring = feats.seasonal;
+	const careerScoring = feats.career;
 	const scoringLeader = (metric: "braces" | "hat_tricks") => {
-		if (!seasonScoring.length) return "None";
-		const highest = Math.max(
-			...[...careerScoring.values()].map((row) => row[metric]),
-		);
-		const names = [...careerScoring.values()]
+		const highest = Math.max(0, ...careerScoring.map((row) => row[metric]));
+		if (highest === 0) return "None";
+		const names = careerScoring
 			.filter((row) => row[metric] === highest)
 			.map((row) => row.name)
+			.sort()
 			.join(", ");
 		return `${names} (${highest})`;
 	};
@@ -406,22 +359,38 @@ export function CareerRecords() {
 							/>
 						</>
 					)}
-					<SectionHeading title="Scoring feats" />
-					<SectionHeading title="Career totals">
+					<div id="scoring-feats">
+						<SectionHeading title="Scoring feats">
+							<Pill>
+								{feats.hatTricks.length} hat-tricks / selected
+								fixtures
+							</Pill>
+						</SectionHeading>
+						<ScoringCoverage feats={feats} />
+					</div>
+					<SectionHeading
+						title={
+							filters.season === "all" &&
+							filters.competition === "all" &&
+							filters.preseason
+								? "Career totals"
+								: "Selected totals"
+						}
+					>
 						<Pill>Most braces: {scoringLeader("braces")}</Pill>
 						<Pill>
 							Most hat-tricks: {scoringLeader("hat_tricks")}
 						</Pill>
 					</SectionHeading>
-					{careerScoring.size === 0 ? (
+					{careerScoring.length === 0 ? (
 						<Empty title="No braces or hat-tricks recorded" />
 					) : (
 						<DataTable
-							rows={[...careerScoring.values()]}
+							rows={careerScoring}
 							rowKey={(row) => row.id}
 							searchLabel="Search career scoring feats"
 							searchText={(row) => row.name}
-							defaultSort={{ key: "braces", desc: true }}
+							defaultSort={{ key: "hat_tricks", desc: true }}
 							exportName="career-scoring-feats.json"
 							columns={scoringColumns.filter(
 								(column) => column.key !== "season",
@@ -442,6 +411,8 @@ export function CareerRecords() {
 							columns={scoringColumns}
 						/>
 					)}
+					<SectionHeading title="Hat-trick matches" />
+					<HatTrickTable rows={feats.hatTricks} />
 					<SectionHeading title="Honours & events">
 						<select
 							aria-label="Honour type"
@@ -514,14 +485,7 @@ export function CareerRecords() {
 												)}
 									</div>
 									<h2>{label(String(event.event_type))}</h2>
-									<p>
-										{event.event_type === "golden_boot"
-											? String(event.description).replace(
-													/\s*Wins\s*Golden\s*Boot\b/i,
-													" wins Golden Boot",
-												)
-											: String(event.description)}
-									</p>
+									<p>{eventDescription(event)}</p>
 									{typeof event.player_id === "string" && (
 										<CareerLink
 											to={`/players/${event.player_id}`}

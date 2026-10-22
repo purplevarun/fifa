@@ -30,6 +30,10 @@ try {
 		await development.ssrLoadModule("/src/data.ts");
 	const { CareerContext } =
 		await development.ssrLoadModule("/src/context.ts");
+	const { positionRankings, scoringFeats } =
+		await development.ssrLoadModule("/src/analytics.ts");
+	const { splitJoinedWords } =
+		await development.ssrLoadModule("/src/vocabulary.ts");
 	const pages = await development.ssrLoadModule("/src/pages.tsx");
 	const archive = await development.ssrLoadModule("/src/archive.tsx");
 	const model = createModel(published);
@@ -38,12 +42,68 @@ try {
 		filters: defaultFilters,
 		matches: selectMatches(model, defaultFilters),
 	};
+	const repairedDescriptions = published.competition_events.filter(
+		(event) => {
+			const original = event.description ?? "";
+			const repaired = splitJoinedWords(original);
+			assert.equal(
+				repaired.replace(/\s/g, ""),
+				original.replace(/\s/g, ""),
+			);
+			return repaired !== original;
+		},
+	).length;
+	// Test the browser's module path too: the shared JSON is outside frontend/.
+	const developmentOrigin = `http://127.0.0.1:${development.httpServer.address().port}`;
+	const vocabularyModule = await fetch(
+		`${developmentOrigin}/src/vocabulary.ts`,
+	);
+	assert.equal(vocabularyModule.status, 200);
+	const vocabularyImport = (await vocabularyModule.text()).match(
+		/from\s*["']([^"']*vocab\.json[^"']*)["']/,
+	);
+	assert.ok(
+		vocabularyImport,
+		"The browser module must import the shared vocabulary",
+	);
+	const vocabularyResponse = await fetch(
+		new URL(vocabularyImport[1], developmentOrigin),
+	);
+	assert.equal(
+		vocabularyResponse.status,
+		200,
+		"The shared vocabulary must be readable in development",
+	);
+	assert.ok((await vocabularyResponse.text()).includes('"impressive"'));
+	const feats = scoringFeats(model, context.matches);
+	assert.equal(
+		feats.hatTricks.length,
+		published.player_matches.filter(
+			(row) => row.club_id === model.nottsId && row.goals >= 3,
+		).length,
+		"Hat-tricks must match individual 3+ goal performances",
+	);
+	const positionLeaders = positionRankings(model, context.matches).roles;
+	for (const group of positionLeaders) {
+		for (const candidate of group.candidates) {
+			assert.ok(
+				Number.isFinite(candidate.score) &&
+					candidate.score > 0 &&
+					candidate.score <= 100 + 1e-9,
+			);
+			assert.ok(
+				candidate.known <= candidate.total &&
+					candidate.known / candidate.total >= 0.8,
+			);
+		}
+	}
 	for (const [path, Component] of [
 		["/", pages.Overview],
 		["/matches", pages.Matches],
 		["/players", pages.Players],
 		["/competitions", pages.Competitions],
 		["/career", archive.CareerRecords],
+		["/career?tab=events", archive.CareerRecords],
 		["/audit", archive.Audit],
 		["/data", archive.Explorer],
 	]) {
@@ -105,6 +165,14 @@ try {
 				matches: model.matches.length,
 				players: model.players.size,
 				appearances: published.player_matches.length,
+				hat_tricks: feats.hatTricks.length,
+				vocabulary_repaired_descriptions: repairedDescriptions,
+				position_leaders: positionLeaders.map((group) => ({
+					role: group.role,
+					player: group.candidates[0]?.name ?? null,
+					score: group.candidates[0]?.score ?? null,
+					complete_appearances: group.candidates[0]?.known ?? 0,
+				})),
 			},
 			null,
 			2,

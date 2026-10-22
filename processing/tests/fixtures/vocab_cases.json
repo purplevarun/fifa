@@ -1,0 +1,60 @@
+[
+  {
+    "input": "Kubo's impressiveperformancefor Notts Countyearned himthe award.",
+    "expected": "Kubo's impressive performance for Notts County earned him the award."
+  },
+  {
+    "input": "Kubo'simpressiveperformanceforNotts Countyearned himthe EFLChampionship award.",
+    "expected": "Kubo's impressive performance for Notts County earned him the EFL Championship award."
+  },
+  {
+    "input": "Countydefeated Oxford United to winthe Checkatrade Trophybefore thousands; rememberedas a finale.",
+    "expected": "County defeated Oxford United to win the Checkatrade Trophy before thousands; remembered as a finale."
+  },
+  {
+    "input": "Aaron Ramsdalehas been named goalkeeper of EFL LeagueTwo.",
+    "expected": "Aaron Ramsdale has been named goalkeeper of EFL League Two."
+  },
+  {
+    "input": "PlayeroftheMonth: ZokoWinsGoldenBoot. GOALSANDASSISTS!",
+    "expected": "Player of the Month: Zoko Wins Golden Boot. GOALS AND ASSISTS!"
+  },
+  {
+    "input": "Kubo’simpressiveperformanceforNotts\nforNotts\tCountyearned",
+    "expected": "Kubo’s impressive performance for Notts\nfor Notts\tCounty earned"
+  },
+  {
+    "input": "Notts County, international into within unknownperson Éarned éCountyearned rto Aviard anounced tives",
+    "expected": "Notts County, international into within unknownperson Éarned éCountyearned rto Aviard anounced tives"
+  },
+  {
+    "input": "intothe unknownCountyearned CountyearnedUnknown",
+    "expected": "intothe unknownCountyearned CountyearnedUnknown"
+  },
+  {
+    "input": "FIFA19 AFIFA19 2020-08-26 W22 D15 L9 GF82 GA51 80/20 Countyearned19 Countyearned_1 Countyearned-abc",
+    "expected": "FIFA19 AFIFA19 2020-08-26 W22 D15 L9 GF82 GA51 80/20 Countyearned19 Countyearned_1 Countyearned-abc"
+  },
+  {
+    "input": "Calvert-Lewin's hard-won victory. Kubo's performances are impressive.",
+    "expected": "Calvert-Lewin's hard-won victory. Kubo's performances are impressive."
+  },
+  { "input": "", "expected": "" },
+  {
+    "words": ["the", "win", "there", "rewin"],
+    "input": "therewin",
+    "expected": "therewin"
+  },
+  {
+    "words": ["the", "win", "there"],
+    "input": "therewin",
+    "expected": "there win"
+  },
+  { "words": ["in", "to", "into"], "input": "into", "expected": "into" },
+  {
+    "words": [],
+    "input": "forNotts Countyearned",
+    "expected": "forNotts Countyearned"
+  },
+  { "words": ["new", "word"], "input": "NewWord", "expected": "New Word" }
+]

@@ -1,3 +1,5 @@
+import { splitJoinedWords } from "./vocabulary";
+
 export type Row = Record<string, unknown>;
 export interface Entity extends Row {
 	id: string;
@@ -488,6 +490,20 @@ export function label(value: string) {
 		.replace(/\b\w/g, (character) => character.toUpperCase())
 		.replace(/\bPct\b/g, "%")
 		.replace(/\bId\b/g, "ID");
+}
+export function eventDescription(event: Row): string {
+	let text = typeof event.description === "string" ? event.description : "";
+	// Older exports included sponsor-board logos below the news article. Only
+	// remove a trailing run of known logo tokens with at least two FIFA marks.
+	const tail = text.match(
+		/(?:^|\s)(?:(?:[A-Z]{0,3}FIF[AR]\s*19|PA|RA|GA|EA|EFL|LEASUETW|A)\s*)+$/,
+	);
+	if (tail && (tail[0].match(/FIF[AR]\s*19/g)?.length ?? 0) >= 2)
+		text = text.slice(0, tail.index).trimEnd();
+	text = splitJoinedWords(text);
+	return event.event_type === "golden_boot"
+		? text.replace(/\s*Wins\s*Golden\s*Boot\b/i, " wins Golden Boot")
+		: text;
 }
 export function downloadJson(value: unknown, filename: string) {
 	const blob = new Blob([JSON.stringify(value, null, 2)], {

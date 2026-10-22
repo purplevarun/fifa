@@ -84,6 +84,57 @@ only recorded match ratings, not player overall ratings. Passing totals require
 all three distance components for each counted appearance. Unknown measurements
 are excluded, partial totals are marked, and chart tooltips show record coverage.
 
+### Best Players by Position
+
+The homepage also shows a winner and up to two runners-up for each role, following
+all active filters. These are custom stats-based scores, not FIFA overall ratings
+or official awards. The cards expose their weights, per-appearance measurements,
+coverage and an expandable explanation.
+
+| Role                               | Weights                                                                      |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| Forward (ST, CF, LW, RW, LF, RF)   | 80% goals + 20% assists                                                      |
+| Midfielder (CM, CAM, CDM, LM, RM)  | 40% completed passes + 50% key passes + 10% tackles won                      |
+| Defender (CB, LB, RB, LWB, RWB)    | 45% tackles won + 45% interceptions/blocks/clearances + 10% completed passes |
+| Goalkeeper                         | 50% saves (caught + parried) + 30% clean sheets + 20% fewer goals conceded   |
+| Playmaker (all outfield positions) | 50% goals + 50% assists                                                      |
+
+Each component uses the same complete appearances, averages per appearance, and
+is scaled against the best eligible average within that role before weighting.
+An all-zero component contributes zero. For goals conceded, the scaling factor is
+`(1 + lowest average) / (1 + player average)`. Scores are out of 100 but are not
+comparable between roles or filter selections. Minutes are not consistently
+recorded, so per-90 statistics are not invented.
+
+Eligibility requires five complete appearances in that role (or the number of
+selected fixtures if fewer), at least 80% complete records, and a positive score.
+Incomplete appearances are excluded rather than filled with zeros, and samples
+under five are marked provisional. Ties use more complete appearances, then name.
+Recorded match positions take priority; otherwise the first displayed position
+is used. Role changes are scored separately, and unknown positions are excluded.
+Goalkeeper clean sheets require a recorded zero goals-conceded value, without
+claiming that the player completed 90 minutes.
+
+Playmaker is an additional overlapping contribution category, not a new match
+position. All recognised outfield appearances qualify, including those by
+defenders; goalkeepers and unknown positions do not. A player can feature in
+both the playmaker ranking and their usual positional ranking. Outfield
+appearances across position changes are combined for playmaker eligibility.
+
+### Recorded Hat-tricks
+
+The homepage includes a count, player totals and an expandable, searchable,
+exportable match list. **Career records > Honours & events** uses the same
+calculation and active filters for player totals, season totals and match details.
+A hat-trick is one unique player/match appearance with **3 or more goals**;
+4, 5 or 6 goals still count as one. Braces mean exactly two goals. Extra-time goals
+count, but penalty shootouts and cumulative season snapshots do not.
+
+Goal coverage, assumed goalkeeper zeros, missing goal values and incomplete
+lineups are explicit. These totals describe captured matches, not proof that every
+career fixture was captured. See [the scoring review](processing/SCORING_REVIEW.md)
+for the checked screenshots and remaining audit limitations.
+
 ## Player Statistics and Honours
 
 On **Players**, choose a season and use **Player statistic** to rank completed
@@ -105,6 +156,45 @@ outside Notts County, and remain visible independently of league/season filters.
 Champions are listed by competition and season and follow those filters, without
 restricting winners to Notts County. Both sections are visible before any awards
 have been recorded.
+
+Repeated FIFA sponsor-board logos at the end of news articles are no longer
+shown as award descriptions. Older exports are cleaned for display only; their
+full records remain inspectable. Future OCR runs clean the parsed article while
+retaining the original text and token boxes in diagnostic evidence. Legitimate
+FIFA mentions and competition names are not removed.
+
+### OCR Vocabulary
+
+[vocab.json](vocab.json) is the single shared word list for Python processing and
+the frontend. It lives outside generated data, so `./run process` does not delete
+it. Add known English words or proper-name components to its `words` array;
+matching is case-insensitive. Keep `schema_version` at 1. Invalid entries fail
+explicitly rather than silently affecting extraction.
+
+News titles and article bodies are repaired before parsing. Existing exported
+event descriptions also get display-only repair, so old joined text improves
+without rerunning OCR. Examples include `Countyearned` → `County earned`,
+`impressiveperformancefor` → `impressive performance for`, and
+`EFLChampionship` → `EFL Championship`.
+
+The splitter accepts a token only when **all** its characters form one unique
+sequence of vocabulary words. Whole known words take precedence, ambiguous or
+unknown tokens stay unchanged, and no partial-prefix guesses are made. A known
+possessive followed by joined text can be separated, e.g.
+`Kubo'simpressive` → `Kubo's impressive`. Original casing, punctuation and existing
+whitespace are preserved. Tokens containing numbers/IDs, hyphenated names and
+non-English letters are not split. Tokens longer than 160 characters are skipped.
+
+This is spacing repair, not a spell-checker or an automatic OCR-word learner:
+`Aviard` and other misspellings remain unknown until deliberately addressed.
+Include legitimate compound words such as `within` to protect them from splitting.
+The helper is not applied to numeric stat cells or stored record identifiers;
+raw OCR fields, token boxes and old exported records remain untouched.
+
+Vocabulary edits are picked up by the next processing command and by Vite's
+normal module reload during development. Rebuild/redeploy the frontend for a
+published dashboard to use changes. Python and frontend tests share spacing
+fixtures to keep their behaviour aligned.
 
 ## Process Screenshots
 
@@ -361,8 +451,9 @@ matches them (excluding the export timestamp). A partial failed run or unpublish
 manual changes therefore fail this consistency check until resolved.
 
 After building, `validate:data` loads the actual generated dataset into the React
-model, server-renders all seven main pages, and checks development and production
-preview JSON responses, ETags, and missing-file behavior. It needs no browser
+model, checks hat-tricks and positional scores, server-renders the main pages and
+honours view, and checks development and production preview JSON responses, ETags,
+and missing-file behavior. It needs no browser
 automation permissions; Playwright remains the separate interactive UI check.
 
 `npm --prefix frontend run preview` opens a production build locally and reads

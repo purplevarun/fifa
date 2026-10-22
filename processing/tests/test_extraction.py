@@ -8,6 +8,7 @@ from PIL import Image
 from processing.extraction import (
     ScreenshotExtractor,
     classify,
+    clean_news_text,
     parse_calendar_month,
     parse_counts,
     parse_header,
@@ -114,6 +115,57 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(parse_news_date("05/09/2018"), "2018-09-05")
         self.assertIsNone(parse_news_date("31/02/2019"))
         self.assertIsNone(parse_news_date("NEW!"))
+
+    def test_news_text_drops_only_repeated_sponsor_logo_footers(self):
+        body = "Kubo earned the EFL Championship Player of the Month award for August."
+        footers = (
+            "PA FIFA19 AFIFA19 EAFIFA19 EFL AFIFA19 AFIFA19",
+            "PA FIFA19 AFIFA19 EAFIFR19 AFIFA19 FAFIFA19",
+            "LEASUETW RA FIFA19 AFIFA19 EA FIFR19 EFL GA FIFA19 AFIFA19",
+            "LEASUETW PA FIFR19 EFL AFIFA19 EAFIFA19 EFL AFIFA19 AFIFA19",
+            "PA FIFA19 AFIFA19 EAFIFA19 EFL A FIFA19 AFIFA19",
+        )
+        for footer in footers:
+            with self.subTest(footer=footer):
+                self.assertEqual(clean_news_text(f"{body} {footer}"), body)
+                event = parse_news_event(
+                    "Kubo grabs August Player of the Month Award",
+                    f"{body} {footer}",
+                    announced_on="2020-09-01",
+                )
+                self.assertTrue(event["description"].endswith(body))
+                self.assertEqual(event["competition"], "EFL Championship")
+                self.assertEqual(event["period"], "2020-08")
+        for text in (
+            "An award in FIFA 19.",
+            "An award in FIFA19",
+            "FIFA19 and FIFA19 players celebrate.",
+            "Award confirmed. PA",
+            "EFL League One champions",
+            "",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(clean_news_text(text), text)
+
+    def test_sponsor_cleanup_preserves_raw_news_evidence(self):
+        title = "Kubo grabs August Player of the Month Award"
+        body = "Kubo earned the EFL Championship Player of the Month award for August."
+        footer = "PA FIFA19 AFIFA19 EAFIFA19"
+        records, fields, _ = ScreenshotExtractor(engine=Mock()).extract_news(
+            ocr_tokens(
+                [
+                    (title, 960, 230, 1250, 245),
+                    (body, 960, 280, 1250, 310),
+                    (footer, 960, 580, 1250, 600),
+                    (title, 100, 210, 360, 240),
+                    ("01/09/2020", 100, 250, 225, 265),
+                ]
+            )
+        )
+        self.assertEqual(len(records), 1)
+        self.assertTrue(records[0]["description"].endswith(body))
+        self.assertNotIn("AFIFA19", records[0]["description"])
+        self.assertIn(footer, fields["article.body"]["raw_text"])
 
     def test_dashboard_calendar_is_not_an_award_announcement_date(self):
         self.assertEqual(parse_calendar_month("Monday,Feb18,2019"), "2019-02")

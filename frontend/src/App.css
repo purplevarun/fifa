@@ -15,6 +15,8 @@
 		--muted: #737a71;
 		--line: #dfe4da;
 		--green: #276f54;
+		--position-accent: var(--green);
+		--ranking-accent: var(--green);
 		--surface: #fff;
 		--soft: #f0f3ec;
 		--warning: #8b642a;
@@ -545,6 +547,200 @@
 		justify-content: space-between;
 		margin: 0 0 19px;
 		min-height: 28px;
+	}
+
+	.position-leaders {
+		margin-top: 30px;
+	}
+
+	.position-leaders > .section-heading {
+		flex-wrap: wrap;
+		margin-bottom: 8px;
+	}
+
+	.position-intro {
+		font-size: 12px;
+		margin-bottom: 18px;
+	}
+
+	.position-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+	}
+
+	.position-card {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		padding: 18px;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-top: 3px solid var(--position-accent);
+		border-radius: 5px;
+	}
+
+	.position-card-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		color: var(--position-accent);
+		margin-bottom: 5px;
+	}
+
+	.position-winner {
+		font:
+			600 27px/1.15 "Barlow Condensed",
+			sans-serif;
+		margin: 19px 0 8px;
+		overflow-wrap: anywhere;
+	}
+
+	.position-score,
+	.hat-trick-total {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		font-size: 11px;
+		color: var(--muted);
+	}
+
+	.position-score strong,
+	.hat-trick-total strong {
+		font:
+			600 40px/1.1 "Barlow Condensed",
+			sans-serif;
+		font-variant-numeric: tabular-nums;
+		color: var(--position-accent, var(--green));
+	}
+
+	.position-card meter {
+		width: 100%;
+		height: 8px;
+		margin-top: 8px;
+		accent-color: var(--position-accent);
+	}
+
+	.position-coverage {
+		font-size: 10px;
+		color: var(--muted);
+		margin: 9px 0;
+	}
+
+	.position-card > .pill {
+		align-self: flex-start;
+		white-space: normal;
+		margin-bottom: 6px;
+	}
+
+	.position-metrics {
+		margin: 12px 0;
+		font-size: 12px;
+	}
+
+	.position-metrics > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		border-top: 1px solid var(--line);
+		padding: 10px 0;
+	}
+
+	.position-metrics dd {
+		flex-shrink: 0;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.position-metrics small {
+		display: block;
+		font-size: 10px;
+		color: var(--muted);
+	}
+
+	.position-runners {
+		margin: auto 0 12px;
+		padding: 14px 0 0 18px;
+		font-size: 11px;
+		border-top: 1px solid var(--line);
+	}
+
+	.position-runners li {
+		position: relative;
+		padding-right: 36px;
+		margin-bottom: 7px;
+		overflow-wrap: anywhere;
+	}
+
+	.position-runners span {
+		position: absolute;
+		right: 0;
+		top: 0;
+		font-variant-numeric: tabular-nums;
+		color: var(--muted);
+	}
+
+	.position-no-winner {
+		font-size: 12px;
+		padding: 28px 0;
+	}
+
+	.position-no-winner p {
+		color: var(--muted);
+		margin-top: 8px;
+	}
+
+	.stats-methodology,
+	.overview-hat-tricks {
+		background: var(--soft);
+		border: 1px solid var(--line);
+		border-radius: 5px;
+		padding: 16px 20px;
+		margin-top: 18px;
+	}
+
+	.stats-methodology,
+	.scoring-coverage {
+		font-size: 12px;
+		line-height: 1.7;
+	}
+
+	.stats-methodology p,
+	.scoring-coverage p {
+		margin-top: 8px;
+	}
+
+	.stats-methodology summary,
+	.hat-trick-details summary {
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--green);
+		cursor: pointer;
+	}
+
+	.overview-hat-tricks > .section-heading {
+		flex-wrap: wrap;
+		margin-bottom: 12px;
+	}
+
+	.hat-trick-players {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-top: 12px;
+	}
+
+	.scoring-coverage {
+		margin-bottom: 20px;
+	}
+
+	.hat-trick-details .data-table {
+		margin-top: 18px;
+	}
+
+	#scoring-feats {
+		scroll-margin-top: 160px;
 	}
 
 	.overview-charts {
@@ -1933,6 +2129,10 @@
 	}
 
 	@media (min-width: 1360px) {
+		.position-grid {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+
 		.overview-charts {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
@@ -2018,6 +2218,12 @@
 		.event-record > .button {
 			grid-column: 3;
 			justify-self: start;
+		}
+	}
+
+	@media (max-width: 600px) {
+		.position-grid {
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 

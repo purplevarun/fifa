@@ -13,6 +13,7 @@ from .normalization import (
     normalize_positions,
     resolve_nationality,
 )
+from .vocabulary import split_joined_words
 
 BASE_WIDTH = 1366
 BASE_HEIGHT = 768
@@ -359,10 +360,23 @@ def parse_calendar_month(text):
     return None
 
 
+def clean_news_text(text):
+    """Drop sponsor footers and repair only unambiguous vocabulary joins."""
+    tail = re.search(
+        r"(?:^|\s)(?:(?:[A-Z]{0,3}FIF[AR]\s*19|PA|RA|GA|EA|EFL|LEASUETW|A)\s*)+$",
+        text,
+    )
+    if tail and len(re.findall(r"FIF[AR]\s*19", tail.group())) >= 2:
+        text = text[: tail.start()].rstrip()
+    return split_joined_words(text)
+
+
 def parse_news_event(
     title, body="", announced_on=None, observed_on=None, *, sidebar=False
 ):
-    title = news_title(title)
+    title = split_joined_words(news_title(title))
+    # Raw body text and token boxes remain untouched in the OCR evidence.
+    body = clean_news_text(body)
     normalized = compact(title)
     if any(
         word in normalized

@@ -27,6 +27,7 @@ import {
 	snapshotOrder,
 	summarize,
 } from "./data";
+import { OverviewHatTricks, PositionLeaders } from "./overviewStats";
 import type { Column } from "./ui";
 import {
 	CareerLink,
@@ -311,6 +312,8 @@ export function Overview() {
 				<Empty />
 			) : (
 				<>
+					<PositionLeaders />
+					<OverviewHatTricks />
 					<div className="overview-charts">
 						{overviewCharts.map((chart, index) => (
 							<section
