@@ -3,7 +3,8 @@ import json
 import unicodedata
 from pathlib import Path
 
-from .database import connect, json_text
+from .catalog import fixture_details
+from .store import Store, json_text
 from .extraction import TEAM_ROWS
 from .pipeline import approve_review, make_review, select_sources, write_json
 
@@ -81,9 +82,7 @@ def fixture_contexts(connection):
         source_id = source["id"]
         screen_type = source["screen_type"]
         if screen_type == "match_facts":
-            matches = connection.execute(
-                "SELECT match_id FROM match_sources WHERE source_id = ?", (source_id,)
-            ).fetchall()
+            matches = connection.rows("match_sources", source_id=source_id)
             current_match = matches[0]["match_id"] if len(matches) == 1 else None
             interrupted = False
         elif screen_type in {"player_performance", "goalkeeper_performance"}:
@@ -137,11 +136,9 @@ def prepare_player_cores(connection, decisions):
             record["assists"] = 0
         record.update(decisions.get("player_core_overrides", {}).get(str(sequence), {}))
         if source["screen_type"] == "goalkeeper_performance":
-            fixture = connection.execute(
-                "SELECT matches.*, home.name AS home_club FROM matches "
-                "JOIN clubs home ON home.id = home_club_id WHERE matches.id = ?",
-                (record["match_id"],),
-            ).fetchone()
+            fixture = fixture_details(
+                connection, connection.get("matches", record["match_id"])
+            )
             opponent_side = (
                 "away"
                 if name_key(record["club"]) == name_key(fixture["home_club"])
@@ -193,10 +190,7 @@ def prepare_team_tables(connection, decisions):
             continue
         record = source["records"][0]
         if "team_stats" not in record:
-            candidate = connection.execute(
-                "SELECT candidate_json FROM extractions WHERE source_id = ?",
-                (source["source_id"],),
-            ).fetchone()
+            candidate = connection.get("extractions", source["source_id"])
             record["team_stats"] = json.loads(candidate["candidate_json"])[0][
                 "team_stats"
             ]
@@ -292,11 +286,19 @@ def prepare_season_end(connection, decisions):
                 for field in ("overall", "age", "displayed_position", "nationality")
             },
         }
-        existing = connection.execute(
-            "SELECT date_basis FROM player_snapshots JOIN players ON players.id = player_id "
-            "WHERE source_id = ? AND players.name = ? AND snapshot_kind = 'season_end'",
-            (source["id"], player["player"]),
-        ).fetchone()
+        existing = next(
+            (
+                row
+                for row in connection.rows(
+                    "player_snapshots",
+                    source_id=source["id"],
+                    snapshot_kind="season_end",
+                )
+                if connection.get("players", row["player_id"])["name"]
+                == player["player"]
+            ),
+            None,
+        )
         if existing:
             profile["date_basis"] = existing["date_basis"]
         records = [profile]
@@ -337,44 +339,38 @@ def main():
         "--kind", choices=("matches", "players", "teams", "season"), default="matches"
     )
     arguments = parser.parse_args()
-    connection = connect(Path(__file__).resolve().parent / "data" / "career.sqlite")
-    try:
-        decisions = json.loads(arguments.decisions.read_text(encoding="utf-8"))
-        prepare = {
-            "matches": prepare_match_headers,
-            "players": prepare_player_cores,
-            "teams": prepare_team_tables,
-            "season": prepare_season_end,
+    diagnostics = Path(__file__).resolve().parent / "data" / "diagnostics.json"
+    store = Store.load(diagnostics)
+    decisions = json.loads(arguments.decisions.read_text(encoding="utf-8"))
+    prepare = {
+        "matches": prepare_match_headers,
+        "players": prepare_player_cores,
+        "teams": prepare_team_tables,
+        "season": prepare_season_end,
+    }[arguments.kind]
+    document = prepare(store, decisions)
+    write_json(arguments.output, document, overwrite=False)
+    print(
+        json_text(
+            {
+                "review_sources": len(document["sources"]),
+                "output": str(arguments.output),
+            }
+        ),
+        end="",
+    )
+    if arguments.approve:
+        note_key = {
+            "matches": "match_header_review",
+            "players": "player_core_review",
+            "teams": "team_table_review",
+            "season": "review_note",
         }[arguments.kind]
-        document = prepare(connection, decisions)
-        write_json(arguments.output, document, overwrite=False)
-        print(
-            json_text(
-                {
-                    "review_sources": len(document["sources"]),
-                    "output": str(arguments.output),
-                }
-            ),
-            end="",
+        result = approve_review(
+            store, document, decisions[note_key], arguments.replace_reviewed
         )
-        if arguments.approve:
-            note_key = {
-                "matches": "match_header_review",
-                "players": "player_core_review",
-                "teams": "team_table_review",
-                "season": "review_note",
-            }[arguments.kind]
-            note = decisions[note_key]
-            print(
-                json_text(
-                    approve_review(
-                        connection, document, note, arguments.replace_reviewed
-                    )
-                ),
-                end="",
-            )
-    finally:
-        connection.close()
+        store.save(diagnostics)
+        print(json_text(result), end="")
 
 
 if __name__ == "__main__":

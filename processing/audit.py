@@ -8,21 +8,23 @@ import argparse
 import json
 import math
 import re
-import sqlite3
 from collections import Counter
-from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image
 
-from .database import (
+from .catalog import (
     IMAGE_EXTENSIONS,
     coverage_report,
+    fixture_details,
     image_hash,
+    match_precedes,
     screenshot_sequence,
-    validate_database,
+    source_sequence,
+    validate_records,
 )
+from .store import Store
 from .extraction import (
     GOALKEEPER_ROWS,
     OUTFIELD_ROWS,
@@ -346,18 +348,21 @@ def compare_independent_fields(evidence, independent):
 
 
 def saved_sources(connection):
-    return {
-        row["path"]: dict(row)
-        for row in connection.execute(
-            "SELECT p.path, p.sequence, s.id, s.sha256, s.screen_type, s.status, s.error, "
-            "e.candidate_json, e.evidence_json, e.issues_json, e.extractor_version, r.payload_json, r.note "
-            "FROM source_paths p JOIN source_images s ON s.id=p.source_id "
-            "LEFT JOIN extractions e ON e.source_id=s.id "
-            "LEFT JOIN reviews r ON r.source_id=s.id AND r.revision="
-            "(SELECT MAX(previous.revision) FROM reviews previous WHERE previous.source_id=s.id) "
-            "WHERE p.present=1"
+    saved = {}
+    for path in connection.rows("source_paths", present=True):
+        source = connection.get("source_images", path["source_id"])
+        extraction = connection.get("extractions", source["id"]) or dict.fromkeys(
+            ("candidate_json", "evidence_json", "issues_json", "extractor_version")
         )
-    }
+        review = connection.latest_review(source["id"])
+        saved[path["path"]] = {
+            **source,
+            **path,
+            **extraction,
+            "payload_json": review["payload_json"] if review else None,
+            "note": review["note"] if review else None,
+        }
+    return saved
 
 
 def audit_source_extraction(source, row, second):
@@ -432,7 +437,7 @@ def audit_source(path, root, row, second):
         source["issues"].append(
             {
                 "code": "not_inventoried",
-                "detail": "Original has not been inventoried in this database.",
+                "detail": "Original has not been inventoried in these processing diagnostics.",
             }
         )
         return source
@@ -509,12 +514,22 @@ def ordered_snapshot_comparisons(connection):
     relabel an undated snapshot as season_end or change canonical reconciliation.
     """
     comparisons = []
-    snapshots = connection.execute(
-        "SELECT totals.*, player.name AS player, MIN(path.sequence) AS sequence "
-        "FROM player_competition_snapshots totals JOIN players player ON player.id=totals.player_id "
-        "JOIN source_paths path ON path.source_id=totals.source_id AND path.present=1 "
-        "GROUP BY totals.id ORDER BY sequence, totals.id"
-    ).fetchall()
+    snapshots = [
+        {
+            **row,
+            "player": connection.get("players", row["player_id"])["name"],
+            "sequence": source_sequence(connection, row["source_id"]),
+        }
+        for row in connection.rows("player_competition_snapshots")
+        if connection.find("source_paths", source_id=row["source_id"], present=True)
+    ]
+    snapshots.sort(
+        key=lambda row: (row["sequence"] is not None, row["sequence"] or 0, row["id"])
+    )
+    fixtures = {
+        row["id"]: fixture_details(connection, row)
+        for row in connection.rows("matches")
+    }
     for snapshot in snapshots:
         if snapshot["sequence"] is None:
             comparisons.append(
@@ -527,22 +542,21 @@ def ordered_snapshot_comparisons(connection):
                 }
             )
             continue
-        appearances = connection.execute(
-            "SELECT appearance.* FROM player_matches appearance JOIN matches fixture ON fixture.id=appearance.match_id "
-            "JOIN competition_seasons edition ON edition.id=fixture.competition_season_id "
-            "WHERE appearance.player_id=? AND appearance.club_id=? AND edition.season_id=? "
-            "AND (? IS NULL OR fixture.competition_season_id=?) "
-            "AND EXISTS(SELECT 1 FROM match_sources link JOIN source_paths path ON path.source_id=link.source_id "
-            "WHERE link.match_id=fixture.id AND path.present=1 AND path.sequence<?)",
-            (
-                snapshot["player_id"],
-                snapshot["club_id"],
-                snapshot["season_id"],
-                snapshot["competition_season_id"],
-                snapshot["competition_season_id"],
-                snapshot["sequence"],
-            ),
-        ).fetchall()
+        appearances = [
+            row
+            for row in connection.rows(
+                "player_matches",
+                player_id=snapshot["player_id"],
+                club_id=snapshot["club_id"],
+            )
+            if fixtures[row["match_id"]]["season_id"] == snapshot["season_id"]
+            and (
+                snapshot["competition_season_id"] is None
+                or fixtures[row["match_id"]]["competition_season_id"]
+                == snapshot["competition_season_id"]
+            )
+            and match_precedes(connection, row["match_id"], snapshot["sequence"])
+        ]
         metrics = {
             "appearances": {
                 "captured": snapshot["appearances"],
@@ -631,7 +645,7 @@ def screenshot_audit(connection, root, independent=None):
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
-        "database_errors": validate_database(connection),
+        "validation_errors": validate_records(connection),
         "match_coverage": coverage,
         "season_reconciliation": dated,
         "ordered_snapshot_comparisons": ordered,
@@ -650,7 +664,7 @@ def main(argv=None):
     parser.add_argument(
         "--root", type=Path, default=Path(__file__).resolve().parents[1]
     )
-    parser.add_argument("--db", type=Path)
+    parser.add_argument("--diagnostics", type=Path)
     parser.add_argument(
         "--independent",
         type=Path,
@@ -658,26 +672,21 @@ def main(argv=None):
     )
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args(argv)
-    database = (
-        arguments.db or arguments.root / "processing/data/career.sqlite"
-    ).resolve()
+    diagnostics = (
+        arguments.diagnostics or arguments.root / "processing/data/diagnostics.json"
+    )
     independent = {}
     if arguments.independent:
         with arguments.independent.open(encoding="utf-8") as stream:
             for line in stream:
                 reading = json.loads(line)
                 independent[reading["path"]] = reading
-    with closing(
-        sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
-    ) as connection:
-        connection.row_factory = sqlite3.Row
-        connection.execute("BEGIN")
-        report = screenshot_audit(connection, arguments.root, independent)
+    report = screenshot_audit(Store.load(diagnostics), arguments.root, independent)
     write_json(arguments.output, report)
     print(json.dumps(report["summary"], indent=2))
     summary = report["summary"]
     failed = (
-        report["database_errors"]
+        report["validation_errors"]
         or summary["source_issue_counts"]
         or summary["field_issue_counts"]
         or summary["independent_numeric_disagreements"]

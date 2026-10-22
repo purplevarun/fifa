@@ -29,7 +29,7 @@ import nottsCountyCrest from "./assets/notts-county-crest.png";
 import { CareerContext } from "./context";
 import type { Filters, Model } from "./data";
 import { createModel, dateLabel, downloadJson, selectMatches } from "./data";
-import { loadStaticCareerDataset, watchCareerDataset } from "./loadData";
+import { watchCareerDataset } from "./loadData";
 import {
 	CompetitionDetail,
 	Competitions,
@@ -170,7 +170,7 @@ function Shell({
 						<div>
 							<strong>Read-only archive</strong>
 							<span>
-								SQLite export / v{model.data.schema_version}
+								JSON export / v{model.data.schema_version}
 							</span>
 						</div>
 					</div>
@@ -367,55 +367,33 @@ function App() {
 		setReload((value) => value + 1);
 	}
 	useEffect(() => {
-		if (import.meta.env.PROD) {
-			const controller = new AbortController();
-			void (async () => {
-				try {
-					const data = await loadStaticCareerDataset(
-						fetch,
-						"./data/dashboard.json",
-						controller.signal,
-					);
-					if (controller.signal.aborted) return;
+		return watchCareerDataset(
+			fetch,
+			{
+				onData(data) {
 					setModel(createModel(data));
 					setError(null);
-				} catch (reason) {
-					if (controller.signal.aborted) return;
+				},
+				onMissing() {
+					setModel(null);
+					setError(
+						"Waiting for dashboard.json. Run ./run process to generate it.",
+					);
+				},
+				onError(reason) {
 					setModel(null);
 					setError(
 						reason instanceof Error
 							? reason.message
 							: "Could not load career data.",
 					);
-				} finally {
-					if (!controller.signal.aborted) setRefreshing(false);
-				}
-			})();
-			return () => {
-				controller.abort();
-			};
-		}
-		return watchCareerDataset(fetch, {
-			onData(data) {
-				setModel(createModel(data));
-				setError(null);
+				},
+				onSettled() {
+					setRefreshing(false);
+				},
 			},
-			onMissing() {
-				setModel(null);
-				setError("Waiting for processed career data.");
-			},
-			onError(reason) {
-				setModel(null);
-				setError(
-					reason instanceof Error
-						? reason.message
-						: "Could not load career data.",
-				);
-			},
-			onSettled() {
-				setRefreshing(false);
-			},
-		});
+			import.meta.env.DEV ? 3000 : null,
+		);
 	}, [reload]);
 	if (!model)
 		return (

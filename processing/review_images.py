@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .database import connect
+from .store import Store
 
 
 def font(size):
@@ -62,25 +62,22 @@ def make_sheets(connection, root, output, mode="matches", start=0, end=99999):
     )
     if mode == "squads":
         screen_types = {"squad"}
-    rows = [
-        dict(row)
-        for row in connection.execute(
-            "SELECT sequence, path, source_images.id, screen_type, candidate_json FROM source_images "
-            "JOIN source_paths ON source_paths.source_id = source_images.id JOIN extractions ON extractions.source_id = source_images.id "
-            "WHERE present = 1 AND sequence BETWEEN ? AND ? ORDER BY sequence",
-            (start, end),
-        )
-        if row["screen_type"] in screen_types
-    ]
+    rows = []
+    for path in connection.rows("source_paths", present=True):
+        if path["sequence"] is None or not start <= path["sequence"] <= end:
+            continue
+        source = connection.get("source_images", path["source_id"])
+        extraction = connection.get("extractions", path["source_id"])
+        if extraction and source["screen_type"] in screen_types:
+            rows.append({**source, **path, **extraction})
+    rows.sort(key=lambda row: (row["sequence"], row["path"]))
     if mode == "squads":
         return make_squad_sheets(rows, root, output)
     if mode == "teams":
         distinct = []
         seen_matches = set()
         for row in rows:
-            fixture = connection.execute(
-                "SELECT match_id FROM match_sources WHERE source_id = ?", (row["id"],)
-            ).fetchone()
+            fixture = connection.find("match_sources", source_id=row["id"])
             if fixture and fixture["match_id"] not in seen_matches:
                 seen_matches.add(fixture["match_id"])
                 distinct.append(row)
@@ -231,19 +228,16 @@ def main():
     parser.add_argument("--end", type=int, default=99999)
     arguments = parser.parse_args()
     data_directory = arguments.root / "processing" / "data"
-    connection = connect(data_directory / "career.sqlite")
-    try:
-        for result in make_sheets(
-            connection,
-            arguments.root,
-            arguments.output or data_directory / "review" / "sheets",
-            arguments.mode,
-            arguments.start,
-            arguments.end,
-        ):
-            print(result)
-    finally:
-        connection.close()
+    store = Store.load(data_directory / "diagnostics.json")
+    for result in make_sheets(
+        store,
+        arguments.root,
+        arguments.output or data_directory / "review" / "sheets",
+        arguments.mode,
+        arguments.start,
+        arguments.end,
+    ):
+        print(result)
 
 
 if __name__ == "__main__":

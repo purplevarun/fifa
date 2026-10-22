@@ -1,9 +1,8 @@
 import os
-import tempfile
 import unittest
 from pathlib import Path
 
-from processing.database import connect, insert_entity
+from processing.store import Store, insert_entity
 from processing.extraction import ScreenshotExtractor, club_name, parse_profile_details
 from processing.identifiers import normalize_references
 from processing.normalization import (
@@ -124,10 +123,7 @@ class IdentityParsingTests(unittest.TestCase):
 
 class IdentityImportTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.connection = connect(Path(self.directory.name) / "career.sqlite")
-        self.addCleanup(self.connection.close)
+        self.connection = Store()
 
     def test_club_alias_order_does_not_create_duplicates(self):
         for raw, canonical in CLUB_CASES:
@@ -136,23 +132,17 @@ class IdentityImportTests(unittest.TestCase):
                 self.assertEqual(ensure_club(self.connection, canonical), first)
                 self.assertEqual(ensure_club(self.connection, "  " + raw + "  "), first)
                 self.assertEqual(
-                    self.connection.execute(
-                        "SELECT name FROM clubs WHERE id=?", (first,)
-                    ).fetchone()[0],
+                    self.connection.get("clubs", first)["name"],
                     canonical,
                 )
-        self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM clubs").fetchone()[0], 7
-        )
+        self.assertEqual(self.connection.count("clubs"), 7)
 
     def test_existing_variant_keeps_its_id_and_alias(self):
         existing = insert_entity(self.connection, "clubs", {"name": "Lincolncity"})
         self.assertEqual(ensure_club(self.connection, "Lincoln City"), existing)
         self.assertEqual(ensure_club(self.connection, "Lincolncity"), existing)
         self.assertEqual(
-            self.connection.execute(
-                "SELECT name FROM clubs WHERE id=?", (existing,)
-            ).fetchone()[0],
+            self.connection.get("clubs", existing)["name"],
             "Lincoln City",
         )
 
@@ -161,18 +151,14 @@ class IdentityImportTests(unittest.TestCase):
         insert_entity(self.connection, "clubs", {"name": "Coventrycity"})
         with self.assertRaisesRegex(ValueError, "Duplicate club identity"):
             ensure_club(self.connection, "Coventry City")
-        self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM clubs").fetchone()[0], 2
-        )
+        self.assertEqual(self.connection.count("clubs"), 2)
 
     def test_missing_nationality_gets_verified_fallback_without_overwriting_known_data(
         self,
     ):
         player_id = ensure_player(self.connection, {"player": "Lionel Messi"})
         self.assertEqual(
-            self.connection.execute(
-                "SELECT nationality FROM players WHERE id=?", (player_id,)
-            ).fetchone()[0],
+            self.connection.get("players", player_id)["nationality"],
             "Argentina",
         )
         player_id = ensure_player(
@@ -180,9 +166,7 @@ class IdentityImportTests(unittest.TestCase):
         )
         ensure_player(self.connection, {"player": "Matty James"})
         self.assertEqual(
-            self.connection.execute(
-                "SELECT nationality FROM players WHERE id=?", (player_id,)
-            ).fetchone()[0],
+            self.connection.get("players", player_id)["nationality"],
             "Canada",
         )
         with self.assertRaisesRegex(ValueError, "Conflicting nationality"):
@@ -200,24 +184,18 @@ class IdentityImportTests(unittest.TestCase):
             self.connection, {"player_id": player_id, "player": "Scott Cuthbert"}
         )
         self.assertEqual(
-            self.connection.execute(
-                "SELECT nationality FROM players WHERE id=?", (player_id,)
-            ).fetchone()[0],
+            self.connection.get("players", player_id)["nationality"],
             "Scotland",
         )
         unknown = ensure_player(
             self.connection, {"player": "Unknown Player", "nationality": "Narnia"}
         )
-        self.assertIsNone(
-            self.connection.execute(
-                "SELECT nationality FROM players WHERE id=?", (unknown,)
-            ).fetchone()[0]
-        )
+        self.assertIsNone(self.connection.get("players", unknown)["nationality"])
 
     def test_external_provenance_does_not_get_treated_as_an_internal_uuid(self):
         _, basis = resolve_nationality("Lionel Messi")
         value = {"nationality_basis": basis}
-        self.assertEqual(normalize_references(self.connection, value), value)
+        self.assertEqual(normalize_references(value), value)
 
 
 @unittest.skipUnless(

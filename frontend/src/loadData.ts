@@ -5,30 +5,6 @@ export type DatasetFetcher = (
 	init?: RequestInit,
 ) => Promise<Response>;
 
-export async function loadCareerDataset(
-	fetcher: DatasetFetcher,
-	url: string,
-	signal: AbortSignal,
-): Promise<Dataset> {
-	const response = await fetcher(url, { signal, cache: "no-store" });
-	if (!response.ok)
-		throw new Error(`Career data request failed (${response.status}).`);
-	return (await response.json()) as Dataset;
-}
-
-export async function loadStaticCareerDataset(
-	fetcher: DatasetFetcher,
-	url: string,
-	signal: AbortSignal,
-): Promise<Dataset> {
-	const response = await fetcher(url, { signal, cache: "no-store" });
-	if (!response.ok)
-		throw new Error(
-			`Static career data request failed (${response.status}).`,
-		);
-	return (await response.json()) as Dataset;
-}
-
 export function watchCareerDataset(
 	fetcher: DatasetFetcher,
 	handlers: {
@@ -37,51 +13,59 @@ export function watchCareerDataset(
 		onError: (error: unknown) => void;
 		onSettled: () => void;
 	},
-	intervalMs = 3000,
+	intervalMs: number | null = 3000,
 ) {
 	const controller = new AbortController();
-	let revision: string | null | undefined;
+	const url = `${import.meta.env.BASE_URL}data/dashboard.json`;
+	let contents: string | null | undefined;
+	let etag: string | null = null;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	async function check() {
 		try {
-			const response = await fetcher("/api/stats/version", {
+			const headers: Record<string, string> = {
+				Accept: "application/json",
+			};
+			if (etag) headers["If-None-Match"] = etag;
+			const response = await fetcher(url, {
 				signal: controller.signal,
 				cache: "no-store",
+				headers,
 			});
+			if (controller.signal.aborted) return;
+			if (response.status === 404) {
+				if (contents !== null) handlers.onMissing();
+				contents = null;
+				etag = null;
+				return;
+			}
+			if (
+				response.status === 304 &&
+				contents !== undefined &&
+				contents !== null
+			) {
+				return;
+			}
 			if (!response.ok)
 				throw new Error(
-					`Career database check failed (${response.status}).`,
+					`Career data request failed (${response.status}).`,
 				);
-			const version = (await response.json()) as { revision: unknown };
-			if (
-				version.revision !== null &&
-				typeof version.revision !== "string"
-			) {
-				throw new Error("Invalid career database version.");
-			}
+			const text = await response.text();
 			if (controller.signal.aborted) return;
-			if (version.revision === null) {
-				if (revision !== null) handlers.onMissing();
-				revision = null;
-			} else if (version.revision !== revision) {
-				const data = await loadCareerDataset(
-					fetcher,
-					"/api/stats",
-					controller.signal,
-				);
-				if (controller.signal.aborted) return;
-				handlers.onData(data);
-				revision = version.revision;
+			if (text !== contents) {
+				handlers.onData(JSON.parse(text) as Dataset);
+				contents = text;
 			}
+			etag = response.headers.get("ETag");
 		} catch (error) {
 			if (!controller.signal.aborted) {
-				revision = undefined;
+				contents = undefined;
+				etag = null;
 				handlers.onError(error);
 			}
 		} finally {
 			if (!controller.signal.aborted) {
 				handlers.onSettled();
-				timer = setTimeout(check, intervalMs);
+				if (intervalMs !== null) timer = setTimeout(check, intervalMs);
 			}
 		}
 	}

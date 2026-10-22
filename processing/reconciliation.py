@@ -2,6 +2,7 @@ from collections import Counter
 from decimal import Decimal, ROUND_DOWN
 
 from . import SCHEMA_VERSION
+from .catalog import fixture_details
 
 
 def player_match_goals(performance):
@@ -31,23 +32,39 @@ def compare_metric(observed, derived, missing=0):
 def reconcile_totals(connection, season=None, club="Notts County", rating_decimals=1):
     if rating_decimals not in (1, 2):
         raise ValueError("Rating display precision must be one or two decimal places")
-    parameters = [club]
-    season_filter = ""
-    if season is not None:
-        season_filter = " AND seasons.label = ?"
-        parameters.append(season)
-    snapshots = connection.execute(
-        "SELECT totals.*, players.name AS player, clubs.name AS club, seasons.label AS season, "
-        "competitions.name AS competition FROM player_competition_snapshots totals "
-        "JOIN players ON players.id = totals.player_id JOIN clubs ON clubs.id = totals.club_id "
-        "JOIN seasons ON seasons.id = totals.season_id "
-        "LEFT JOIN competition_seasons ON competition_seasons.id = totals.competition_season_id "
-        "LEFT JOIN competitions ON competitions.id = competition_seasons.competition_id "
-        "WHERE clubs.name = ? COLLATE NOCASE"
-        + season_filter
-        + " ORDER BY seasons.label, players.name, totals.scope, competitions.name, totals.observed_on",
-        parameters,
-    ).fetchall()
+    snapshots = []
+    for row in connection.rows("player_competition_snapshots"):
+        club_name = connection.get("clubs", row["club_id"])["name"]
+        season_label = connection.get("seasons", row["season_id"])["label"]
+        if club_name.casefold() != club.casefold() or (
+            season is not None and season != season_label
+        ):
+            continue
+        edition = connection.get("competition_seasons", row["competition_season_id"])
+        snapshots.append(
+            {
+                **row,
+                "player": connection.get("players", row["player_id"])["name"],
+                "club": club_name,
+                "season": season_label,
+                "competition": connection.get(
+                    "competitions", edition["competition_id"]
+                )["name"]
+                if edition
+                else None,
+            }
+        )
+    snapshots.sort(
+        key=lambda row: tuple(
+            row[field] or ""
+            for field in ("season", "player", "scope", "competition", "observed_on")
+        )
+    )
+    fixtures = {
+        row["id"]: fixture_details(connection, row)
+        for row in connection.rows("matches")
+    }
+    appearances = connection.rows("player_matches")
     comparisons = []
     metric_counts = {
         field: Counter()
@@ -77,25 +94,25 @@ def reconcile_totals(connection, season=None, club="Notts County", rating_decima
             comparison.update(result="unconfirmed_cutoff", metrics={})
             comparisons.append(comparison)
             continue
-        filters = [
-            "performances.player_id = ?",
-            "performances.club_id = ?",
-            "editions.season_id = ?",
+        performances = [
+            row
+            for row in appearances
+            if row["player_id"] == snapshot["player_id"]
+            and row["club_id"] == snapshot["club_id"]
+            and fixtures[row["match_id"]]["season_id"] == snapshot["season_id"]
+            and (
+                snapshot["scope"] != "competition"
+                or fixtures[row["match_id"]]["competition_season_id"]
+                == snapshot["competition_season_id"]
+            )
+            and (
+                snapshot["observed_on"] is None
+                or fixtures[row["match_id"]]["played_on"] <= snapshot["observed_on"]
+            )
         ]
-        values = [snapshot["player_id"], snapshot["club_id"], snapshot["season_id"]]
-        if snapshot["scope"] == "competition":
-            filters.append("editions.id = ?")
-            values.append(snapshot["competition_season_id"])
-        if snapshot["observed_on"] is not None:
-            filters.append("matches.played_on <= ?")
-            values.append(snapshot["observed_on"])
-        performances = connection.execute(
-            "SELECT performances.* FROM player_matches performances JOIN matches ON matches.id = performances.match_id "
-            "JOIN competition_seasons editions ON editions.id = matches.competition_season_id WHERE "
-            + " AND ".join(filters)
-            + " ORDER BY matches.played_on, performances.id",
-            values,
-        ).fetchall()
+        performances.sort(
+            key=lambda row: (fixtures[row["match_id"]]["played_on"], row["id"])
+        )
         metrics = {
             "appearances": compare_metric(snapshot["appearances"], len(performances))
         }

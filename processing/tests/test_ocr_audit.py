@@ -13,7 +13,9 @@ from processing.audit import (
     valid_number,
     visible_field_issues,
 )
-from processing.database import connect, inventory
+from processing.catalog import inventory
+from processing.record_schema import DEFINITIONS
+from processing.store import Store
 from processing.extraction import (
     ScreenshotExtractor,
     classify,
@@ -277,22 +279,21 @@ class AuditNumericTests(unittest.TestCase):
         )
 
 
-class AuditDatabaseTests(unittest.TestCase):
+class AuditRecordTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         (self.root / "raw_screenshots").mkdir()
-        self.connection = connect(self.root / "audit.sqlite")
-        self.addCleanup(self.connection.close)
+        self.connection = Store()
 
-    def test_every_original_is_counted_in_numeric_order_without_database_writes(self):
+    def test_every_original_is_counted_in_numeric_order_without_record_changes(self):
         for number in (10, 2, 1):
             Image.new("RGB", (12, 8), "white").save(
                 self.root / f"raw_screenshots/{number}.png"
             )
         inventory(self.connection, self.root)
-        changes = self.connection.total_changes
+        before = {table: self.connection.rows(table) for table in DEFINITIONS}
         report = screenshot_audit(self.connection, self.root)
         self.assertEqual(
             [source["sequence"] for source in report["sources"]], [1, 2, 10]
@@ -300,7 +301,9 @@ class AuditDatabaseTests(unittest.TestCase):
         self.assertEqual(report["summary"]["original_files"], 3)
         self.assertEqual(report["summary"]["distinct_images"], 1)
         self.assertEqual(report["summary"]["extracted_files"], 0)
-        self.assertEqual(self.connection.total_changes, changes)
+        self.assertEqual(
+            {table: self.connection.rows(table) for table in DEFINITIONS}, before
+        )
 
     def test_changed_and_uninventoried_files_are_reported(self):
         path = self.root / "raw_screenshots/1.png"
@@ -313,17 +316,13 @@ class AuditDatabaseTests(unittest.TestCase):
         self.assertEqual(report["summary"]["source_issue_counts"]["not_inventoried"], 1)
 
     def test_new_known_competition_works_in_an_existing_archive(self):
-        self.connection.execute(
-            "DELETE FROM competitions WHERE name='EFL Championship'"
-        )
+        self.connection.delete("competitions", name="EFL Championship")
         identifier = ensure_edition(
             self.connection, {"season": "2020/21", "competition": "EFL Championship"}
         )
         self.assertTrue(identifier)
-        row = self.connection.execute(
-            "SELECT kind,is_preseason FROM competitions WHERE name='EFL Championship'"
-        ).fetchone()
-        self.assertEqual(tuple(row), ("league", 0))
+        row = self.connection.find("competitions", name="EFL Championship")
+        self.assertEqual((row["kind"], row["is_preseason"]), ("league", False))
 
     def test_leaderboard_surname_resolves_to_existing_player(self):
         player_id = ensure_player(self.connection, {"player": "Takefusa Kubo"})
@@ -340,9 +339,9 @@ class AuditDatabaseTests(unittest.TestCase):
                 self.root / f"raw_screenshots/{number}.png"
             )
         inventory(self.connection, self.root)
-        sources = self.connection.execute(
-            "SELECT source_id FROM source_paths ORDER BY sequence"
-        ).fetchall()
+        sources = sorted(
+            self.connection.rows("source_paths"), key=lambda row: row["sequence"]
+        )
         record = {
             "type": "player_transfer",
             "player": "Test Player",
@@ -361,7 +360,7 @@ class AuditDatabaseTests(unittest.TestCase):
                     "schema_version": SCHEMA_VERSION,
                     "sources": [
                         {
-                            "source_id": source[0],
+                            "source_id": source["source_id"],
                             "complete": True,
                             "records": [{**record, **changes}],
                         }
@@ -369,13 +368,9 @@ class AuditDatabaseTests(unittest.TestCase):
                 },
                 "Synthetic transfer test",
             )
+        self.assertEqual(self.connection.count("reviews"), 4)
         self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM reviews").fetchone()[0], 4
-        )
-        self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM player_transfers").fetchone()[
-                0
-            ],
+            self.connection.count("player_transfers"),
             3,
         )
 

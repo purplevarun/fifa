@@ -1,86 +1,95 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadCareerDataset, watchCareerDataset } from "./loadData";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { watchCareerDataset } from "./loadData";
 
-describe("career dataset loader", () => {
-	it("requests a dataset without exposing response details in errors", async () => {
-		const dataset = { schema_version: 3 };
+function createHandlers() {
+	return {
+		onData: vi.fn(),
+		onMissing: vi.fn(),
+		onError: vi.fn(),
+		onSettled: vi.fn(),
+	};
+}
+
+describe("dashboard JSON loading", () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllEnvs();
+	});
+
+	it.each(["/", "./", "/fifa-career-mode/"])(
+		"loads dashboard.json relative to the %s base without API requests",
+		async (base) => {
+			vi.stubEnv("BASE_URL", base);
+			const data = { schema_version: 3 };
+			const fetcher = vi.fn(async () => Response.json(data));
+			const handlers = createHandlers();
+			const stop = watchCareerDataset(fetcher, handlers);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(handlers.onData).toHaveBeenCalledWith(data);
+			expect(fetcher).toHaveBeenCalledWith(`${base}data/dashboard.json`, {
+				signal: expect.any(AbortSignal),
+				cache: "no-store",
+				headers: { Accept: "application/json" },
+			});
+			stop();
+		},
+	);
+
+	it("reports failed responses without exposing their contents", async () => {
 		const fetcher = vi.fn(
-			async () => new Response(JSON.stringify(dataset), { status: 200 }),
+			async () => new Response("private details", { status: 503 }),
 		);
+		const handlers = createHandlers();
+		const stop = watchCareerDataset(fetcher, handlers);
+		await vi.advanceTimersByTimeAsync(0);
 
-		await expect(
-			loadCareerDataset(
-				fetcher,
-				"/api/stats",
-				new AbortController().signal,
-			),
-		).resolves.toEqual(dataset);
-		expect(fetcher).toHaveBeenCalledWith("/api/stats", {
-			signal: expect.any(AbortSignal),
-			cache: "no-store",
-		});
+		expect(handlers.onError).toHaveBeenCalledWith(
+			new Error("Career data request failed (503)."),
+		);
+		expect(handlers.onData).not.toHaveBeenCalled();
+		expect(handlers.onSettled).toHaveBeenCalledTimes(1);
+		stop();
 	});
 
-	it("rejects failed responses", async () => {
-		const fetcher = vi.fn(async () => new Response(null, { status: 503 }));
+	it.each(["not JSON", "<!doctype html><title>Not JSON</title>"])(
+		"rejects malformed data and recovers on the next check: %s",
+		async (body) => {
+			const fetcher = vi
+				.fn()
+				.mockResolvedValueOnce(new Response(body))
+				.mockImplementation(async () =>
+					Response.json({ schema_version: 3 }),
+				);
+			const handlers = createHandlers();
+			const stop = watchCareerDataset(fetcher, handlers);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(handlers.onError).toHaveBeenCalledWith(
+				expect.any(SyntaxError),
+			);
+			expect(handlers.onData).not.toHaveBeenCalled();
 
-		await expect(
-			loadCareerDataset(
-				fetcher,
-				"/api/stats",
-				new AbortController().signal,
-			),
-		).rejects.toThrow("503");
-	});
+			await vi.advanceTimersByTimeAsync(3000);
+			expect(handlers.onData).toHaveBeenCalledWith({ schema_version: 3 });
+			stop();
+		},
+	);
 
-	it("rejects malformed local data", async () => {
+	it("uses ETags to avoid unchanged downloads and loads a replaced export", async () => {
+		let generation = "original";
 		const fetcher = vi.fn(
-			async () => new Response("not JSON", { status: 200 }),
+			async (_url: RequestInfo | URL, init?: RequestInit) => {
+				const etag = `"${generation}"`;
+				if (new Headers(init?.headers).get("If-None-Match") === etag)
+					return new Response(null, { status: 304 });
+				return Response.json(
+					{ schema_version: 3, generation },
+					{ headers: { ETag: etag } },
+				);
+			},
 		);
-		await expect(
-			loadCareerDataset(
-				fetcher,
-				"/api/stats",
-				new AbortController().signal,
-			),
-		).rejects.toThrow();
-	});
-
-	it("preserves request cancellation", async () => {
-		const failure = new DOMException("Aborted", "AbortError");
-		const fetcher = vi.fn().mockRejectedValue(failure);
-		await expect(
-			loadCareerDataset(
-				fetcher,
-				"/api/stats",
-				new AbortController().signal,
-			),
-		).rejects.toBe(failure);
-	});
-});
-
-describe("career database changes", () => {
-	afterEach(() => vi.useRealTimers());
-
-	it("loads a recreated database automatically and avoids unchanged data downloads", async () => {
-		vi.useFakeTimers();
-		let revision: string | null = "original";
-		const fetcher = vi.fn(
-			async (url: RequestInfo | URL) =>
-				new Response(
-					JSON.stringify(
-						url === "/api/stats/version"
-							? { revision }
-							: { schema_version: 3, generation: revision },
-					),
-				),
-		);
-		const handlers = {
-			onData: vi.fn(),
-			onMissing: vi.fn(),
-			onError: vi.fn(),
-			onSettled: vi.fn(),
-		};
+		const handlers = createHandlers();
 		const stop = watchCareerDataset(fetcher, handlers);
 		await vi.advanceTimersByTimeAsync(0);
 		expect(handlers.onData).toHaveBeenLastCalledWith({
@@ -89,81 +98,154 @@ describe("career database changes", () => {
 		});
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(handlers.onData).toHaveBeenCalledTimes(1);
+		expect(fetcher.mock.calls[1][1]?.headers).toEqual({
+			Accept: "application/json",
+			"If-None-Match": '"original"',
+		});
 
-		revision = null;
-		await vi.advanceTimersByTimeAsync(3000);
-		expect(handlers.onMissing).toHaveBeenCalledTimes(1);
-		revision = "fresh";
+		generation = "fresh";
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(handlers.onData).toHaveBeenLastCalledWith({
 			schema_version: 3,
 			generation: "fresh",
 		});
 		expect(handlers.onError).not.toHaveBeenCalled();
-		expect(
-			fetcher.mock.calls.filter(([url]) => url === "/api/stats"),
-		).toHaveLength(2);
 		stop();
 		await vi.advanceTimersByTimeAsync(6000);
-		expect(handlers.onData).toHaveBeenCalledTimes(2);
+		expect(fetcher).toHaveBeenCalledTimes(3);
 	});
 
-	it("recovers when processing starts after the page opened", async () => {
-		vi.useFakeTimers();
+	it("compares contents when the server does not provide ETags", async () => {
+		let generation = "original";
+		const fetcher = vi.fn(async () =>
+			Response.json({ schema_version: 3, generation }),
+		);
+		const handlers = createHandlers();
+		const stop = watchCareerDataset(fetcher, handlers);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onData).toHaveBeenCalledTimes(1);
+
+		generation = "fresh";
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onData).toHaveBeenLastCalledWith({
+			schema_version: 3,
+			generation,
+		});
+		expect(handlers.onData).toHaveBeenCalledTimes(2);
+		stop();
+	});
+
+	it("waits for a missing export and reloads it even when recreated unchanged", async () => {
 		let available = false;
 		const fetcher = vi.fn(
-			async (url: RequestInfo | URL) =>
-				new Response(
-					JSON.stringify(
-						url === "/api/stats/version"
-							? { revision: available ? "created" : null }
-							: { schema_version: 3 },
-					),
-				),
+			async (_url: RequestInfo | URL, _init?: RequestInit) =>
+				available
+					? Response.json(
+							{ schema_version: 3 },
+							{ headers: { ETag: '"same"' } },
+						)
+					: new Response(null, { status: 404 }),
 		);
-		const handlers = {
-			onData: vi.fn(),
-			onMissing: vi.fn(),
-			onError: vi.fn(),
-			onSettled: vi.fn(),
-		};
+		const handlers = createHandlers();
 		const stop = watchCareerDataset(fetcher, handlers);
-		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(3000);
 		expect(handlers.onMissing).toHaveBeenCalledTimes(1);
 		expect(handlers.onData).not.toHaveBeenCalled();
+
 		available = true;
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(handlers.onData).toHaveBeenCalledWith({ schema_version: 3 });
+		available = false;
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onMissing).toHaveBeenCalledTimes(2);
+		available = true;
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onData).toHaveBeenCalledTimes(2);
+		expect(fetcher.mock.lastCall?.[1]?.headers).toEqual({
+			Accept: "application/json",
+		});
+		expect(handlers.onError).not.toHaveBeenCalled();
 		stop();
 	});
 
-	it("retries a transient data error without requiring another database change", async () => {
-		vi.useFakeTimers();
-		let failing = true;
-		const fetcher = vi.fn(async (url: RequestInfo | URL) => {
-			if (url === "/api/stats/version")
-				return new Response(JSON.stringify({ revision: "new" }));
-			return failing
-				? new Response(null, { status: 503 })
-				: new Response(JSON.stringify({ schema_version: 3 }));
+	it("retries errors without requiring another export change", async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValueOnce(
+				Response.json(
+					{ schema_version: 3 },
+					{ headers: { ETag: '"same"' } },
+				),
+			)
+			.mockRejectedValueOnce(new TypeError("Network unavailable"))
+			.mockResolvedValueOnce(
+				Response.json(
+					{ schema_version: 3 },
+					{ headers: { ETag: '"same"' } },
+				),
+			);
+		const handlers = createHandlers();
+		const stop = watchCareerDataset(fetcher, handlers);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onData).toHaveBeenCalledTimes(1);
+		expect(handlers.onError).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(handlers.onData).toHaveBeenCalledTimes(2);
+		expect(fetcher.mock.lastCall?.[1]?.headers).toEqual({
+			Accept: "application/json",
 		});
-		const handlers = {
-			onData: vi.fn(),
-			onMissing: vi.fn(),
-			onError: vi.fn(),
-			onSettled: vi.fn(),
-		};
+		stop();
+	});
+
+	it("does not cache an export rejected by model validation", async () => {
+		const fetcher = vi.fn(async () =>
+			Response.json(
+				{ schema_version: 3 },
+				{ headers: { ETag: '"new"' } },
+			),
+		);
+		const handlers = createHandlers();
+		const failure = new Error("Unsupported schema");
+		handlers.onData.mockImplementationOnce(() => {
+			throw failure;
+		});
 		const stop = watchCareerDataset(fetcher, handlers);
 		await vi.advanceTimersByTimeAsync(0);
-		expect(handlers.onError).toHaveBeenCalledTimes(1);
-		failing = false;
+		expect(handlers.onError).toHaveBeenCalledWith(failure);
 		await vi.advanceTimersByTimeAsync(3000);
-		expect(handlers.onData).toHaveBeenCalledWith({ schema_version: 3 });
+		expect(handlers.onData).toHaveBeenCalledTimes(2);
+		expect(fetcher).toHaveBeenLastCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				headers: { Accept: "application/json" },
+			}),
+		);
 		stop();
 	});
 
-	it("cancels an in-flight check on cleanup", async () => {
-		vi.useFakeTimers();
+	it.each([200, 404, 503])(
+		"loads once without polling in production (HTTP %s)",
+		async (status) => {
+			const fetcher = vi.fn(async () =>
+				Response.json({ schema_version: 3 }, { status }),
+			);
+			const handlers = createHandlers();
+			const stop = watchCareerDataset(fetcher, handlers, null);
+			await vi.advanceTimersByTimeAsync(9000);
+			expect(fetcher).toHaveBeenCalledTimes(1);
+			expect(handlers.onSettled).toHaveBeenCalledTimes(1);
+			if (status === 200)
+				expect(handlers.onData).toHaveBeenCalledTimes(1);
+			if (status === 404)
+				expect(handlers.onMissing).toHaveBeenCalledTimes(1);
+			if (status === 503)
+				expect(handlers.onError).toHaveBeenCalledTimes(1);
+			stop();
+		},
+	);
+
+	it("cancels an in-flight check and future polling on cleanup", async () => {
 		let resolve: ((response: Response) => void) | undefined;
 		const fetcher = vi.fn(
 			(_url: RequestInfo | URL, _init?: RequestInit) =>
@@ -171,15 +253,10 @@ describe("career database changes", () => {
 					resolve = done;
 				}),
 		);
-		const handlers = {
-			onData: vi.fn(),
-			onMissing: vi.fn(),
-			onError: vi.fn(),
-			onSettled: vi.fn(),
-		};
+		const handlers = createHandlers();
 		const stop = watchCareerDataset(fetcher, handlers);
 		stop();
-		resolve?.(new Response(JSON.stringify({ revision: "new" })));
+		resolve?.(Response.json({ schema_version: 3 }));
 		await vi.advanceTimersByTimeAsync(6000);
 		expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
 		expect(fetcher).toHaveBeenCalledTimes(1);

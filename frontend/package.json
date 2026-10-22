@@ -10,6 +10,7 @@
 		"format": "prettier --write . --ignore-path .gitignore",
 		"test": "vitest run src",
 		"test:e2e": "playwright test",
+		"validate:data": "node scripts/validate-data.mjs",
 		"preview": "vite preview"
 	},
 	"dependencies": {

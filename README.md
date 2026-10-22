@@ -5,9 +5,11 @@ authentication, sync, or `.env` configuration is needed.
 
 ```text
 raw_screenshots/             Put all original screenshots here
-processing/                 Python OCR, validation, and SQLite code
-processing/data/career.sqlite  Your saved stats (ignored by Git)
+processing/                 Python OCR, in-memory records, and validation
+processing/data/diagnostics.json  OCR evidence and review records (generated)
+processing/data/processing-report.json  Latest processing result (generated)
 frontend/                   Vite/React dashboard
+frontend/public/data/dashboard.json  Published UI dataset (versioned)
 run                         Commands below
 ```
 
@@ -33,7 +35,7 @@ This formats frontend files in place with Prettier, using the existing
 `frontend/.prettierrc` tab settings and `frontend/.gitignore` exclusions. It then
 formats Python source and tests under `processing/` with Ruff. Generated
 `processing/data/` contents, frontend build output, test results, and dependencies
-are excluded. Formatting does not process screenshots or reset the database.
+are excluded. Formatting does not process screenshots or reset generated data.
 
 The command accepts no arguments and works from any working directory. Ruff is
 pinned in `processing/requirements.txt`; the setup commands above install both
@@ -46,40 +48,32 @@ formatters.
 ```
 
 Open http://127.0.0.1:5000. If port 5000 is already in use, startup stops instead
-of silently choosing another port. The dashboard reads the current SQLite
-database through a local `/api/stats` endpoint. There is no separate server to
-start and no JSON export or frontend rebuild needed when stats change.
+of silently choosing another port. Both local development and production read
+`data/dashboard.json`, generated at `frontend/public/data/dashboard.json` by
+`./run process`. No Python process or database is needed to serve the dashboard
+once that JSON exists. Processing and maintenance also use Python records and
+JSON only; there is no SQLite dependency or database-serving API.
 
-The main dashboard always follows `processing/data/career.sqlite`, the same
-database written by `./run process`. It checks for changes every three seconds
-and reloads the dataset when the database or its SQLite write-ahead log changes.
-If the data folder is removed, the page stops displaying the old stats and waits;
-it automatically loads the newly created database as processing writes it.
-Neither a dev-server restart nor a manual browser reload is needed. Deleting
-the folder still removes its database, backups, and saved corrections.
+The local dashboard checks the JSON every three seconds, using HTTP ETags to
+avoid downloading unchanged data when supported. A successful processing run
+atomically replaces the export; the open page then loads the new dataset without
+a dev-server restart or manual reload. While processing runs, or if it fails,
+the last successful export remains visible. Deleting `processing/data/` does not
+remove the published JSON, although it still deletes the diagnostics, backups, and
+saved corrections in that folder.
 
-The homepage identifies the database being displayed and shows **Last processed**
-from its most recent finished processing run, in your local timezone. This time
-is saved in SQLite and does not change when the page reloads. Older databases
-without run history show **Last OCR saved** instead; this is the timestamp of
-their last saved extraction, not a claimed command-completion time. Skipped
-sources and OCR errors from a recorded run are displayed separately.
+If `dashboard.json` is missing, the page asks you to run `./run process`; local
+development automatically loads the file once it appears. Production builds
+include a copy in `dist/data/dashboard.json` and load it on page open or when
+**Reload exported data** is selected. Rebuild and redeploy to publish a new export
+to a static host.
 
-To inspect another database without replacing the main archive, start a separate
-read-only dashboard instance on an unused port. These optional settings apply
-only to that server process; no `.env` file is required:
-
-```sh
-CAREER_DB="/absolute/path/to/preview.sqlite" \
-CAREER_DATA_LABEL="Fresh processing preview" \
-npm --prefix frontend run dev -- --port 5001 --strictPort
-```
-
-Both development and production-preview servers support these settings. They do
-not import data or alter the chosen database. Plain `./run start` continues to
-use the main archive. An alternate preview follows only its explicitly selected
-database; it never replaces or redirects the main archive. `./run start` ignores
-preview environment settings so it always opens the processor's main database.
+The homepage identifies `dashboard.json` and shows **Last processed** from the
+processing metadata in that export, in your local timezone. This time does not
+change when the page reloads. Older exports without run history show **Last OCR
+saved** instead; this is the timestamp of their last saved extraction, not a
+claimed command-completion time. Skipped sources and OCR errors from a recorded
+run are displayed separately.
 
 ## Overview Rankings
 
@@ -121,35 +115,48 @@ Put new images into `raw_screenshots/`, then run:
 ```
 
 **Every run deletes the entire `processing/data/` folder first.** This includes
-the current database, OCR cache, saved corrections, review history, exports,
-previews, and any backups inside that folder. No automatic backup is created.
+the previous diagnostics, saved corrections, review history, reports, and any
+backups inside that folder. No automatic backup is created. The published
+`frontend/public/data/dashboard.json` is outside that folder and is retained.
 
-The command then recreates `processing/data/career.sqlite`, inventories all
-remaining original screenshots, runs OCR on every distinct image, and imports
-valid statistics automatically. Previously processed images are processed again;
+The flow is **screenshots → OCR → normalize, deduplicate and link → validate →
+`dashboard.json`**. One Python command does the entire job, using in-memory
+records rather than an intermediate database. It inventories all remaining
+original screenshots and runs OCR on every distinct image. Previously processed images are processed again;
 identical file contents are deduplicated within the new scan. Entity UUIDs and
 processing history are regenerated on every run. Original screenshots and source
 code are not deleted or rewritten.
 
-After a successful rebuild, the launcher automatically exports the same
-dashboard dataset as `frontend/public/data/dashboard.json`. This static JSON
-file is ignored as a generated artifact and can be bundled by a GitHub Pages
-build; failed or partial rebuilds do not overwrite it.
+After a successful rebuild, Python atomically publishes
+`frontend/public/data/dashboard.json`, the sole UI dataset
+for both local development and production. This generated JSON file is tracked
+in Git for static builds such as GitHub Pages; failed or
+partial rebuilds do not overwrite it.
+
+The processor also writes `processing/data/diagnostics.json` (source hashes,
+paths, OCR readings, normalized records, aliases, review history, and run metadata)
+and `processing/data/processing-report.json` (counts and errors). These are
+auxiliary troubleshooting outputs, not inputs to the next full rebuild and not
+UI data sources. All relationship, uniqueness, type, and range checks run in
+Python. A failed source import rolls back its in-memory changes without losing
+other valid sources. No saved JSON answers override fresh OCR.
 
 **No flags and no review or approval step are required.** The former `--clean`,
 `--reextract`, `--limit`, and `--screenshots` options are rejected before deletion,
-as are any other arguments to `./run process`. The command always writes the main
-database and cannot be redirected with `--db`. Symlinked processing or data
+as are any other arguments to `./run process`. The command always publishes the
+main dashboard; `--db` is retired and `--diagnostics` cannot redirect processing.
+Symlinked processing or data
 directories are rejected to avoid deleting data outside the intended location.
 
-The open main dashboard automatically detects the replacement database and
-shows the new run's processing timestamp. During processing it may show partial
-new results; old statistics are not retained as a fallback.
+The open local dashboard automatically detects the replacement JSON and shows
+the new run's processing timestamp. It keeps displaying the last successful
+export during processing; partial results are not published.
 
-If processing fails or is interrupted, the old data is already deleted. The new
-folder can contain partial results. Rerunning `./run process` deletes those too
-and starts from the beginning; it does not resume a cache. With no screenshots,
-the recreated database has no statistics.
+If processing fails, the latest diagnostics and processing report identify the
+failed sources while the previous dashboard JSON stays unchanged. An interrupted
+run may end before diagnostics are saved. Rerunning `./run process` starts from
+the beginning; it does not resume a cache. With no screenshots, a successful run
+publishes an empty statistical dataset.
 
 Unreadable single-digit player and team counts get a contrast-normalized,
 enlarged-glyph retry.
@@ -202,9 +209,10 @@ years and conflicting winners remain unresolved rather than being guessed.
 
 Multiple captures of the same annual award or competition-season championship
 share one event. Each screenshot keeps its own OCR and review evidence; repeat
-captures do not inflate honour counts. Schema 4 permits competition-independent
-annual awards while retaining existing UUIDs and reviewed records when upgrading
-a schema-3 database. The dashboard accepts both schema versions.
+captures do not inflate honour counts. The published schema remains version 4,
+including competition-independent annual awards; the dashboard also accepts
+older schema-3 exports. Historical database migrations are no longer supported:
+rebuild from the original screenshots instead.
 
 Player and goalkeeper screenshots are linked to the preceding match summary in
 numeric screenshot order. An unrelated or unrecognized screen breaks that
@@ -216,12 +224,12 @@ Append new screenshots with numbers above the current highest number, keeping
 each match summary before its player screenshots. Renumbering is safe only when
 the existing numeric order is preserved; alphabetical order is not equivalent.
 
-Each source is validated and saved in its own transaction. Missing required
+Each source is validated and added in its own in-memory transaction. Missing required
 context and conflicting records are reported under
 `import.skipped_sources`; they do not block attempts to import other valid
-screenshots. OCR failures, unimportable extracted records, and database validation
-errors produce a nonzero exit code and an incomplete result, not a rollback to
-the deleted database. Non-stat screens with no records are reported separately
+screenshots. OCR failures, unimportable extracted records, and record validation
+errors produce a nonzero exit code and an incomplete result, leaving the last
+published dashboard unchanged. Non-stat screens with no records are reported separately
 under `import.ignored_sources`; they do not make a successful run incomplete.
 Their OCR evidence is retained. Recognized statistics screens that yield no records
 still require attention and produce a nonzero exit code.
@@ -232,7 +240,7 @@ are not manually verified, so OCR mistakes that pass validation can still occur.
 
 OCR improvements are implemented in the processor and tested against values
 visible in original screenshots. Processing does not load a saved-answer file
-to override fresh extraction. Each rebuild starts without earlier SQLite-only
+to override fresh extraction. Each rebuild starts without earlier manual
 corrections or learned aliases, so its results may differ from manually corrected
 archives.
 Recognition and relationship validation cannot guarantee 100% accuracy for
@@ -241,7 +249,7 @@ zero coverage warnings does not mean every screenshot yielded a record.
 
 ### Full-archive audit
 
-`./run process` rebuilds the database and dashboard export; it does **not** run
+`./run process` rebuilds the dashboard JSON and diagnostics; it does **not** run
 the audit automatically. After processing finishes, generate a fresh JSON report
 with the separate command below. `processing/OCR_AUDIT.md` is a maintained summary,
 not an automatically generated processing output.
@@ -254,7 +262,8 @@ This is a **read-only check**, not a rebuild. It visits every original path in
 numeric order, verifies image hashes against OCR evidence, and reports files
 that are new, changed, unextracted, unimported, or produced no records. Identical
 files are listed individually even though processing deduplicates their content.
-Use `--db /absolute/path/to/audit.sqlite` to inspect an isolated processing run.
+Use `--diagnostics /absolute/path/to/diagnostics.json` to inspect a saved run.
+The report's `validation_errors` field contains record-integrity failures.
 
 The report checks every expected on-screen player/team count, percentage
 consistency, profile metadata, and competition-row sums against displayed totals.
@@ -289,25 +298,26 @@ Accepted contract-panel transfers, including pre-contracts, are treated as
 completed under the owner's confirmed archive rule; exact completion dates are
 not invented. Neither successful import nor this automated audit is manual visual
 verification. Reports in `processing/data/` are deleted by the next `./run process`;
-copy any report or audit database outside that folder to retain it.
+copy any report or diagnostics JSON outside that folder to retain it.
 
 ## Delete Old Screenshots
 
 **Keep the original screenshots for any statistics you want to rebuild.** Deleting
-an image does not immediately change the displayed database, but the next
+an image does not immediately change the displayed dashboard, but the next
 `./run process` rebuilds from only the remaining files. Data supported only by
 deleted originals will be lost. Images are identified by content hash, not by
 the highest filename number:
 
 - A new image reusing an old filename is processed.
 - Identical copied files are processed once per rebuild.
-- An empty screenshot folder produces an empty database on the next run.
-- The website reads SQLite; it does not need the images until processing runs again.
+- An empty screenshot folder produces an empty statistical dataset on the next run.
+- The website reads `dashboard.json`; it needs neither SQLite nor the original images.
 
-Keep `processing/data/career.sqlite`: it contains the stats, review history, and
-small processing checkpoints. It is not committed to Git and is replaced on
-every processing run. Processing does not make another permanent copy of your
-images or delete the originals automatically.
+Keep `dashboard.json` to display the published statistics and retain a copy of
+`diagnostics.json` outside `processing/data/` if you need its evidence or review
+history later. Processing diagnostics are ignored by Git; the published dashboard
+JSON is versioned. Processing does not make
+another permanent copy of your images or delete the originals automatically.
 
 ## Optional Maintenance
 
@@ -320,26 +330,50 @@ those tools still requires `--replace-reviewed`; those manual changes are lost
 on the next full processing run. Store any manual backup **outside**
 `processing/data/` if it needs to survive processing.
 
+After manual corrections, publish the reviewed JSON records to the UI without
+rerunning OCR (which would discard those corrections):
+
+```sh
+python3 -m processing export
+```
+
+The local dashboard picks up this export automatically. `approve` and batch
+review tools save changes to `diagnostics.json`; they do not update the published
+UI until you export. `./run process` already publishes after a successful rebuild.
+Maintenance commands can read another saved run with
+`python3 -m processing --diagnostics /absolute/path/to/diagnostics.json status`.
+
 ```sh
 python3 -m processing status
-python3 -m processing backup backups/my-backup.sqlite
+python3 -m processing validate
+python3 -m processing backup backups/my-backup.json
 python3 -W error::ResourceWarning -m unittest discover -s processing/tests -q
 npm --prefix frontend test
 npm --prefix frontend run lint
 npm --prefix frontend run build
+npm --prefix frontend run validate:data
 npm --prefix frontend run test:e2e
 ```
 
 Use a new backup filename each time. Git history is not rewritten automatically.
+`validate` checks the diagnostic records and confirms the published dashboard
+matches them (excluding the export timestamp). A partial failed run or unpublished
+manual changes therefore fail this consistency check until resolved.
 
-`npm --prefix frontend run preview` opens a production build locally and uses
-the same SQLite endpoint. A static upload to a hosting provider is not part of
-this local app.
+After building, `validate:data` loads the actual generated dataset into the React
+model, server-renders all seven main pages, and checks development and production
+preview JSON responses, ETags, and missing-file behavior. It needs no browser
+automation permissions; Playwright remains the separate interactive UI check.
+
+`npm --prefix frontend run preview` opens a production build locally and reads
+its bundled `dist/data/dashboard.json`, with no database endpoint. Rebuild the
+frontend after exporting new data to update this production preview. A static
+upload to a hosting provider is not part of this local app.
 
 Missing goals scored default to zero for appearances recorded as GK in the
 dashboard and reconciliation, with assumed values marked in the data and
 verification tooltips. A recorded match position takes precedence over the
-displayed position. Existing goal counts are never replaced, and the raw SQLite
+displayed position. Existing goal counts are never replaced, and the raw diagnostic
 values are retained. Other missing values, including outfield goals, stay
 unknown. Shootout scores stay separate from match goals, and cumulative season
 totals are not added to match totals.

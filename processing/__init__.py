@@ -1,4 +1,4 @@
-"""Screenshot-backed career data, with SQLite as the canonical store."""
+"""Screenshot-backed career data, transformed in memory and published as JSON."""
 
 SCHEMA_VERSION = 4
 

@@ -11,7 +11,7 @@ Usage: ./run <start|process|format>
 
 Commands:
   start        Start the local dashboard at http://127.0.0.1:5000
-  process      Delete processing/data/ and rebuild all screenshot statistics
+  process      Rebuild dashboard.json directly from all original screenshots
   format       Format frontend files with Prettier and Python files with Ruff
 
 The process and format commands accept no arguments.
@@ -25,7 +25,6 @@ fi
 
 case "$command_name" in
   start)
-    unset CAREER_DB CAREER_DATA_LABEL
     exec npm --prefix "$FRONTEND_DIR" run dev -- --port 5000 --strictPort "$@"
     ;;
   process)
@@ -33,8 +32,7 @@ case "$command_name" in
       printf '%s\n' 'The process command accepts no arguments. Use ./run process.' >&2
       exit 2
     fi
-    python3 -m processing process
-    python3 -m processing export --output "$FRONTEND_DIR/public/data/dashboard.json"
+    exec python3 -m processing process
     ;;
   format)
     if [ "$#" -ne 0 ]; then

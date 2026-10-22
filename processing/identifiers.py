@@ -32,30 +32,21 @@ def is_uuid(value):
     return str(parsed) == value and parsed.int != 0
 
 
-def resolve_id(connection, table, value, allow_legacy=False):
+def resolve_id(table, value):
     if value is None or is_uuid(value):
         return value
-    if allow_legacy and isinstance(value, (int, str)) and not isinstance(value, bool):
-        mapped = connection.execute(
-            "SELECT uuid FROM legacy_ids WHERE entity_table = ? AND old_value = ?",
-            (table, str(value)),
-        ).fetchone()
-        if mapped:
-            return mapped[0]
     raise ValueError(f"{table} identifier must be a canonical UUID: {value!r}")
 
 
-def normalize_references(connection, value, allow_legacy=False):
+def normalize_references(value):
     if isinstance(value, list):
-        return [normalize_references(connection, item, allow_legacy) for item in value]
+        return [normalize_references(item) for item in value]
     if not isinstance(value, dict):
         return value
     result = {}
     for field, item in value.items():
         if field in REFERENCE_TABLES:
-            result[field] = resolve_id(
-                connection, REFERENCE_TABLES[field], item, allow_legacy
-            )
+            result[field] = resolve_id(REFERENCE_TABLES[field], item)
         else:
-            result[field] = normalize_references(connection, item, allow_legacy)
+            result[field] = normalize_references(item)
     return result

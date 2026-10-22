@@ -236,13 +236,13 @@ export function Overview() {
 					className={`processing-source${source?.preview ? " preview" : ""}`}
 				>
 					<Database size={14} />
-					{source?.label ?? "Main archive"}
+					{source?.label ?? "dashboard.json"}
 				</span>
 				<span
 					className="processing-time"
 					title={
 						!lastRun && timestampAvailable
-							? "Last saved OCR result; this older database has no processing-run completion time."
+							? "Last saved OCR result; this export has no processing-run completion time."
 							: undefined
 					}
 				>

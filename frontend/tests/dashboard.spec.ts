@@ -2,9 +2,8 @@ import { expect, test } from "@playwright/test";
 import { fixture as data } from "./fixture";
 
 test.beforeEach(async ({ page }) => {
-	await page.route("**/api/stats", (route) => route.fulfill({ json: data }));
-	await page.route("**/api/stats/version", (route) =>
-		route.fulfill({ json: { revision: "fixture" } }),
+	await page.route("**/data/dashboard.json", (route) =>
+		route.fulfill({ json: data }),
 	);
 });
 const season = data.seasons.find((season) => season.label === "2018/19")!;
@@ -111,30 +110,49 @@ test("overview preserves filters, preseason and mobile navigation", async ({
 	expect(errors).toEqual([]);
 });
 
-test("an open dashboard follows a deleted and recreated database", async ({
+test("an open dashboard follows replaced and recreated JSON without an API", async ({
 	page,
 }) => {
 	let revision: string | null = "original";
+	const apiRequests: string[] = [];
+	page.on("request", (request) => {
+		if (new URL(request.url()).pathname.startsWith("/api/"))
+			apiRequests.push(request.url());
+	});
 	const fresh = {
 		...data,
 		players: data.players.map((entry) =>
 			entry.id === player.id ? { ...entry, name: "Fresh Player" } : entry,
 		),
 	};
-	await page.route("**/api/stats/version", (route) =>
-		route.fulfill({ json: { revision } }),
-	);
-	await page.route("**/api/stats", (route) =>
-		route.fulfill({ json: revision === "rebuilt" ? fresh : data }),
-	);
+	await page.route("**/data/dashboard.json", (route) => {
+		if (revision === null)
+			return route.fulfill({ status: 404, body: "Not found" });
+		const etag = `"${revision}"`;
+		if (route.request().headers()["if-none-match"] === etag)
+			return route.fulfill({ status: 304 });
+		return route.fulfill({
+			json: revision === "rebuilt" ? fresh : data,
+			headers: { ETag: etag },
+		});
+	});
 	await page.goto("/");
 	await expect(
 		page.getByRole("heading", { name: "Career overview", exact: true }),
 	).toBeVisible();
+	await expect(page.getByLabel("Dataset processing")).toContainText(
+		"dashboard.json",
+	);
+
+	revision = "rebuilt";
+	await expect(
+		page.locator('[data-statistic="goals"] [role="img"]'),
+	).toHaveAttribute("aria-label", /Fresh Player/, { timeout: 10000 });
+	await expect(page.getByRole("alert")).toHaveCount(0);
 
 	revision = null;
 	await expect(page.getByRole("alert")).toHaveText(
-		"Waiting for processed career data.",
+		"Waiting for dashboard.json. Run ./run process to generate it.",
 		{ timeout: 10000 },
 	);
 	await expect(
@@ -149,6 +167,7 @@ test("an open dashboard follows a deleted and recreated database", async ({
 		page.locator('[data-statistic="goals"] [role="img"]'),
 	).toHaveAttribute("aria-label", /Fresh Player/);
 	await expect(page.getByRole("alert")).toHaveCount(0);
+	expect(apiRequests).toEqual([]);
 });
 
 test("fixture search, score and player records work without screenshots", async ({
@@ -326,15 +345,17 @@ test("career records are available without an image archive", async ({
 test("download exports actual data and missing data can recover", async ({
 	page,
 }) => {
-	await page.route("**/api/stats", (route) =>
+	await page.route("**/data/dashboard.json", (route) =>
 		route.fulfill({ status: 503, body: "Unavailable" }),
 	);
 	await page.goto("/");
 	await expect(page.getByRole("alert")).toContainText(
 		"Career data request failed (503)",
 	);
-	await page.unroute("**/api/stats");
-	await page.route("**/api/stats", (route) => route.fulfill({ json: data }));
+	await page.unroute("**/data/dashboard.json");
+	await page.route("**/data/dashboard.json", (route) =>
+		route.fulfill({ json: data }),
+	);
 	await page.getByRole("button", { name: "Retry" }).click();
 	await expect(
 		page.getByRole("heading", { name: "Career overview", exact: true }),

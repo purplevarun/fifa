@@ -1,107 +1,16 @@
 import hashlib
-import json
 import re
-import sqlite3
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
 
 from . import SCHEMA_VERSION
-from .identifiers import is_uuid, new_id
-from .migrations import migrate_annual_awards, migrate_to_uuids
+from .record_schema import DEFINITIONS
+from .store import EXPORT_TABLES, insert_entity
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
-COMPETITIONS = (
-    ("European International Cup", "cup", True),
-    ("Invitational Cup", "cup", True),
-    ("EFL League Two", "league", False),
-    ("EFL League One", "league", False),
-    ("EFL Championship", "league", False),
-    ("UEFA Champions League", "cup", False),
-    ("UEFA Europa League", "cup", False),
-    ("EFL League Two Play-Offs", "cup", False),
-    ("EFL League One Play-Offs", "cup", False),
-    ("Carabao Cup", "cup", False),
-    ("Checkatrade Trophy", "cup", False),
-    ("FA Cup", "cup", False),
-)
-EXPORT_TABLES = (
-    "players",
-    "clubs",
-    "seasons",
-    "competitions",
-    "competition_seasons",
-    "matches",
-    "team_matches",
-    "player_matches",
-    "player_snapshots",
-    "player_competition_snapshots",
-    "player_transfers",
-    "competition_events",
-    "match_sources",
-    "player_match_sources",
-)
-
-
-def connect(database_path):
-    database_path = Path(database_path)
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(database_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2, 3, SCHEMA_VERSION):
-        connection.close()
-        raise ValueError(f"Unsupported database schema version: {version}")
-    if version == 0:
-        if connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table'"
-        ).fetchone():
-            connection.close()
-            raise ValueError("Refusing to initialize an existing unversioned database")
-        schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
-        try:
-            connection.executescript(f"BEGIN;\n{schema}")
-            connection.executemany(
-                "INSERT INTO competitions(id, name, kind, is_preseason) VALUES (?, ?, ?, ?)",
-                ((new_id(), *competition) for competition in COMPETITIONS),
-            )
-            connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            connection.close()
-            raise
-    if version in (1, 2):
-        try:
-            migrate_to_uuids(
-                connection,
-                database_path,
-                Path(__file__).with_name("schema.sql").read_text(encoding="utf-8"),
-            )
-        except Exception:
-            connection.close()
-            raise
-    if version == 3:
-        try:
-            migrate_annual_awards(connection)
-        except Exception:
-            connection.close()
-            raise
-    return connection
-
-
-def insert_entity(connection, table, values):
-    identifier = new_id()
-    values = {**values, "id": identifier}
-    columns = ", ".join(values)
-    placeholders = ", ".join("?" for value in values)
-    connection.execute(
-        f"INSERT INTO {table}({columns}) VALUES ({placeholders})",
-        tuple(values.values()),
-    )
-    return identifier
 
 
 def image_hash(path):
@@ -128,8 +37,9 @@ def inventory(connection, root):
         ),
         key=lambda path: (screenshot_sequence(path) or 0, path.as_posix()),
     )
-    with connection:
-        connection.execute("UPDATE source_paths SET present = 0")
+    with connection.transaction():
+        for row in connection.rows("source_paths"):
+            connection.update("source_paths", row["path"], {"present": False})
         for path in paths:
             if not path.resolve().is_relative_to(raw_directory.resolve()):
                 raise ValueError(
@@ -137,9 +47,7 @@ def inventory(connection, root):
                 )
             sha256 = image_hash(path)
             counts["files"] += 1
-            known = connection.execute(
-                "SELECT id FROM source_images WHERE sha256 = ?", (sha256,)
-            ).fetchone()
+            known = connection.find("source_images", sha256=sha256)
             if known:
                 source_id = known["id"]
                 counts["known_images"] += 1
@@ -166,15 +74,14 @@ def inventory(connection, root):
                     },
                 )
                 counts["new_images"] += 1
-            connection.execute(
-                "INSERT INTO source_paths(path, source_id, sequence, present) VALUES (?, ?, ?, 1) "
-                "ON CONFLICT(path) DO UPDATE SET source_id = excluded.source_id, "
-                "sequence = excluded.sequence, present = 1",
-                (
-                    path.relative_to(root).as_posix(),
-                    source_id,
-                    screenshot_sequence(path),
-                ),
+            connection.upsert(
+                "source_paths",
+                {
+                    "path": path.relative_to(root).as_posix(),
+                    "source_id": source_id,
+                    "sequence": screenshot_sequence(path),
+                    "present": True,
+                },
             )
     return counts
 
@@ -182,54 +89,58 @@ def inventory(connection, root):
 def status(connection):
     return {
         "schema_version": SCHEMA_VERSION,
-        "source_images": connection.execute(
-            "SELECT COUNT(*) FROM source_images"
-        ).fetchone()[0],
-        "present_paths": connection.execute(
-            "SELECT COUNT(*) FROM source_paths WHERE present = 1"
-        ).fetchone()[0],
+        "source_images": connection.count("source_images"),
+        "present_paths": connection.count("source_paths", present=True),
         "source_states": dict(
-            connection.execute(
-                "SELECT status, COUNT(*) FROM source_images GROUP BY status"
-            )
+            Counter(row["status"] for row in connection.rows("source_images"))
         ),
         "screen_types": dict(
-            connection.execute(
-                "SELECT screen_type, COUNT(*) FROM source_images GROUP BY screen_type"
-            )
+            Counter(row["screen_type"] for row in connection.rows("source_images"))
         ),
         "records": {
-            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            table: connection.count(table)
             for table in EXPORT_TABLES
             if not table.endswith("_sources")
         },
     }
 
 
-def validate_database(connection):
-    errors = []
-    integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
-    if integrity != "ok":
-        errors.append(integrity)
-    errors.extend(
-        str(tuple(row)) for row in connection.execute("PRAGMA foreign_key_check")
+def validate_records(connection):
+    return connection.validate()
+
+
+def fixture_details(connection, fixture):
+    edition = connection.get("competition_seasons", fixture["competition_season_id"])
+    competition = connection.get("competitions", edition["competition_id"])
+    return {
+        **fixture,
+        "home_club": connection.get("clubs", fixture["home_club_id"])["name"],
+        "away_club": connection.get("clubs", fixture["away_club_id"])["name"],
+        "competition": competition["name"],
+        "competition_kind": competition["kind"],
+        "is_preseason": competition["is_preseason"],
+        "season_id": edition["season_id"],
+        "season": connection.get("seasons", edition["season_id"])["label"],
+    }
+
+
+def source_sequence(connection, source_id):
+    sequences = [
+        row["sequence"]
+        for row in connection.rows("source_paths", source_id=source_id, present=True)
+        if row["sequence"] is not None
+    ]
+    return min(sequences, default=None)
+
+
+def match_precedes(connection, match_id, sequence):
+    if sequence is None:
+        return False
+    return any(
+        (number := source_sequence(connection, link["source_id"])) is not None
+        and number < sequence
+        for link in connection.rows("match_sources", match_id=match_id)
     )
-    for table in (*EXPORT_TABLES, "source_images", "reviews"):
-        if table.endswith("_sources"):
-            continue
-        if any(
-            not is_uuid(row[0]) for row in connection.execute(f"SELECT id FROM {table}")
-        ):
-            errors.append(f"{table}: invalid UUID primary key")
-    for table in ("team_matches", "player_matches"):
-        invalid = connection.execute(
-            f"SELECT record.id FROM {table} record JOIN matches fixture ON fixture.id = record.match_id "
-            "WHERE record.club_id NOT IN (fixture.home_club_id, fixture.away_club_id)"
-        ).fetchall()
-        errors.extend(
-            f"{table} {row['id']}: club is not a match participant" for row in invalid
-        )
-    return errors
 
 
 def coverage_report(connection, club_name="Notts County"):
@@ -242,12 +153,14 @@ def coverage_report(connection, club_name="Notts County"):
             "player_match_sources",
         ),
     ):
-        placeholders = ",".join("?" for screen_type in screen_types)
-        sources = connection.execute(
-            f"SELECT id, EXISTS(SELECT 1 FROM {junction} WHERE source_id = source_images.id) AS linked "
-            f"FROM source_images WHERE screen_type IN ({placeholders}) ORDER BY id",
-            screen_types,
-        ).fetchall()
+        linked = {row["source_id"] for row in connection.rows(junction)}
+        sources = [
+            {**row, "linked": row["id"] in linked}
+            for row in sorted(
+                connection.rows("source_images"), key=lambda row: row["id"]
+            )
+            if row["screen_type"] in screen_types
+        ]
         source_coverage[label] = {
             "total": len(sources),
             "linked": sum(source["linked"] for source in sources),
@@ -256,34 +169,46 @@ def coverage_report(connection, club_name="Notts County"):
             ],
         }
     players_by_match = {}
-    for row in connection.execute(
-        "SELECT player_matches.*, players.name AS player_name FROM player_matches JOIN clubs ON clubs.id = club_id "
-        "JOIN players ON players.id = player_id "
-        "WHERE clubs.name = ? COLLATE NOCASE ORDER BY match_id, player_id",
-        (club_name,),
+    for row in sorted(
+        connection.rows("player_matches"),
+        key=lambda row: (row["match_id"], row["player_id"]),
     ):
-        players_by_match.setdefault(row["match_id"], []).append(dict(row))
+        if (
+            connection.get("clubs", row["club_id"])["name"].casefold()
+            == club_name.casefold()
+        ):
+            players_by_match.setdefault(row["match_id"], []).append(
+                {
+                    **row,
+                    "player_name": connection.get("players", row["player_id"])["name"],
+                }
+            )
     teams_by_match = {}
-    for row in connection.execute(
-        "SELECT * FROM team_matches ORDER BY match_id, club_id"
+    for row in sorted(
+        connection.rows("team_matches"),
+        key=lambda row: (row["match_id"], row["club_id"]),
     ):
         teams_by_match.setdefault(row["match_id"], []).append(dict(row))
     team_fields = [
-        row["name"]
-        for row in connection.execute("PRAGMA table_info(team_matches)")
-        if row["name"] not in {"id", "match_id", "club_id"}
+        field
+        for field in DEFINITIONS["team_matches"].columns
+        if field not in {"id", "match_id", "club_id"}
     ]
-    fixtures = connection.execute(
-        "SELECT matches.*, home.name AS home_club, away.name AS away_club, "
-        "competitions.name AS competition, competitions.kind AS competition_kind, "
-        "competitions.is_preseason, seasons.label AS season, "
-        "CASE WHEN home.name = ? COLLATE NOCASE THEN 1 ELSE 0 END AS is_home "
-        "FROM matches JOIN clubs home ON home.id = home_club_id JOIN clubs away ON away.id = away_club_id "
-        "JOIN competition_seasons ON competition_seasons.id = competition_season_id "
-        "JOIN competitions ON competitions.id = competition_id JOIN seasons ON seasons.id = season_id "
-        "WHERE home.name = ? COLLATE NOCASE OR away.name = ? COLLATE NOCASE ORDER BY played_on, matches.id",
-        (club_name, club_name, club_name),
-    ).fetchall()
+    fixtures = []
+    for row in sorted(
+        connection.rows("matches"), key=lambda row: (row["played_on"], row["id"])
+    ):
+        fixture = fixture_details(connection, row)
+        if club_name.casefold() in {
+            fixture["home_club"].casefold(),
+            fixture["away_club"].casefold(),
+        }:
+            fixtures.append(
+                {
+                    **fixture,
+                    "is_home": fixture["home_club"].casefold() == club_name.casefold(),
+                }
+            )
     results = []
     warnings = []
     competitions = {}
@@ -532,7 +457,3 @@ def coverage_report(connection, club_name="Notts County"):
             "Opponent appearances are not included in the selected club's totals.",
         ],
     }
-
-
-def json_text(value):
-    return json.dumps(value, ensure_ascii=True, indent=2, allow_nan=False) + "\n"
