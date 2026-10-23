@@ -91,7 +91,16 @@ export function scoringFeats(model: Model, matches: Match[]) {
 	};
 }
 
-export type PositionRole = "forward" | "midfielder" | "defender" | "goalkeeper";
+export type AwardRole =
+	"forward" | "playmaker" | "midfielder" | "defender" | "goalkeeper";
+export const awardScoring = {
+	contribution: 60,
+	perGame: 25,
+	games: 15,
+	minimumCoverage: 0.8,
+	provisionalAppearances: 5,
+} as const;
+
 interface ScoreMetric {
 	field: string;
 	label: string;
@@ -99,9 +108,8 @@ interface ScoreMetric {
 	lowerIsBetter?: boolean;
 }
 interface PositionDefinition {
-	role: PositionRole | "playmaker";
+	role: AwardRole;
 	title: string;
-	positions: string[];
 	color: string;
 	metrics: ScoreMetric[];
 }
@@ -111,7 +119,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "forward",
 		title: "Best forward",
 		color: "#276f54",
-		positions: ["ST", "CF", "LW", "RW", "LF", "RF"],
 		metrics: [
 			{ field: "goals", label: "Goals", weight: 80 },
 			{ field: "assists", label: "Assists", weight: 20 },
@@ -121,8 +128,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "playmaker",
 		title: "Best playmaker",
 		color: "#76519a",
-		// An overlapping contribution ranking, not a new match position.
-		positions: [],
 		metrics: [
 			{ field: "goals", label: "Goals", weight: 50 },
 			{ field: "assists", label: "Assists", weight: 50 },
@@ -132,7 +137,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "midfielder",
 		title: "Best midfielder",
 		color: "#356a9a",
-		positions: ["CM", "CAM", "CDM", "LM", "RM"],
 		metrics: [
 			{
 				field: "passes_completed",
@@ -147,7 +151,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "defender",
 		title: "Best defender",
 		color: "#a04d67",
-		positions: ["CB", "LB", "RB", "LWB", "RWB"],
 		metrics: [
 			{ field: "tackles_won", label: "Tackles won", weight: 45 },
 			{
@@ -166,7 +169,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "goalkeeper",
 		title: "Best goalkeeper",
 		color: "#9d731b",
-		positions: ["GK"],
 		metrics: [
 			{ field: "saves", label: "Saves (caught + parried)", weight: 50 },
 			{ field: "clean_sheets", label: "Clean sheets", weight: 30 },
@@ -179,15 +181,6 @@ export const positionDefinitions: PositionDefinition[] = [
 		],
 	},
 ];
-
-export function positionRole(position: unknown): PositionRole | null {
-	if (typeof position !== "string") return null;
-	const primary = position.split("/")[0].trim().toUpperCase();
-	const role = positionDefinitions.find((group) =>
-		group.positions.includes(primary),
-	)?.role;
-	return role && role !== "playmaker" ? role : null;
-}
 
 function scoreValue(row: Performance, field: string) {
 	if (field === "clean_sheets")
@@ -220,36 +213,44 @@ export interface PositionCandidate {
 	score: number;
 	known: number;
 	total: number;
+	breakdown: { contribution: number; perGame: number; games: number };
 	metrics: (ScoreMetric & {
 		total: number;
 		perAppearance: number;
+		contributionPoints: number;
+		perGamePoints: number;
 		points: number;
 	})[];
 }
 
+function metricImpact(
+	metric: PositionCandidate["metrics"][number],
+	games: number,
+) {
+	// Conceding more must never earn more points. Invert the conceded rate,
+	// then multiply by recorded games for its accumulated contribution.
+	const perGame = metric.lowerIsBetter
+		? 1 / (1 + metric.perAppearance)
+		: metric.perAppearance;
+	return {
+		contribution: metric.lowerIsBetter ? perGame * games : metric.total,
+		perGame,
+	};
+}
+
 export function positionRankings(model: Model, matches: Match[]) {
 	const rows = appearances(model, matches);
-	const minimumAppearances = Math.min(
-		5,
-		new Set(matches.map((match) => match.id)).size,
-	);
-	const roleOf = (row: Performance) =>
-		positionRole(row.played_position) ??
-		positionRole(row.displayed_position);
+	// Awards describe statistical contributions, not the player's position.
+	const grouped = new Map<string, Performance[]>();
+	for (const row of rows) {
+		const current = grouped.get(row.player_id) ?? [];
+		current.push(row);
+		grouped.set(row.player_id, current);
+	}
 	const roles = positionDefinitions.map((definition) => {
-		const grouped = new Map<string, Performance[]>();
-		for (const row of rows) {
-			const role = roleOf(row);
-			const eligible =
-				definition.role === "playmaker"
-					? role !== null && role !== "goalkeeper"
-					: role === definition.role;
-			if (!eligible) continue;
-			const current = grouped.get(row.player_id) ?? [];
-			current.push(row);
-			grouped.set(row.player_id, current);
-		}
 		const candidates: PositionCandidate[] = [];
+		let insufficientDataPlayers = 0;
+		let noContributionPlayers = 0;
 		for (const [id, playerRows] of grouped) {
 			// Use the SAME complete appearances for every component of a score.
 			const complete = playerRows
@@ -263,16 +264,19 @@ export function positionRankings(model: Model, matches: Match[]) {
 				);
 			if (
 				!complete.length ||
-				complete.length < minimumAppearances ||
-				complete.length / playerRows.length < 0.8
-			)
+				complete.length / playerRows.length <
+					awardScoring.minimumCoverage
+			) {
+				insufficientDataPlayers += 1;
 				continue;
-			candidates.push({
+			}
+			const candidate: PositionCandidate = {
 				id,
 				name: model.players.get(id)?.name ?? "Unknown player",
 				known: complete.length,
 				total: playerRows.length,
 				score: 0,
+				breakdown: { contribution: 0, perGame: 0, games: 0 },
 				metrics: definition.metrics.map((component, index) => {
 					const total = complete.reduce(
 						(sum, values) => sum + values[index],
@@ -282,28 +286,69 @@ export function positionRankings(model: Model, matches: Match[]) {
 						...component,
 						total,
 						perAppearance: total / complete.length,
+						contributionPoints: 0,
+						perGamePoints: 0,
 						points: 0,
 					};
 				}),
-			});
+			};
+			// Playing games alone cannot win an award with no measured contribution.
+			if (
+				candidate.metrics.every(
+					(metric) =>
+						metricImpact(metric, candidate.known).contribution ===
+						0,
+				)
+			) {
+				noContributionPlayers += 1;
+				continue;
+			}
+			candidates.push(candidate);
 		}
 		for (const [index, component] of definition.metrics.entries()) {
-			const values = candidates.map(
-				(player) => player.metrics[index].perAppearance,
+			const impacts = candidates.map((player) =>
+				metricImpact(player.metrics[index], player.known),
 			);
-			const best = component.lowerIsBetter
-				? Math.min(...values)
-				: Math.max(0, ...values);
+			const bestContribution = Math.max(
+				0,
+				...impacts.map((impact) => impact.contribution),
+			);
+			const bestPerGame = Math.max(
+				0,
+				...impacts.map((impact) => impact.perGame),
+			);
 			for (const player of candidates) {
 				const value = player.metrics[index];
-				const proportion = component.lowerIsBetter
-					? (1 + best) / (1 + value.perAppearance)
-					: best > 0
-						? value.perAppearance / best
+				const impact = metricImpact(value, player.known);
+				value.contributionPoints =
+					bestContribution > 0
+						? (((awardScoring.contribution * component.weight) /
+								100) *
+								impact.contribution) /
+							bestContribution
 						: 0;
-				value.points = proportion * component.weight;
-				player.score += value.points;
+				value.perGamePoints =
+					bestPerGame > 0
+						? (((awardScoring.perGame * component.weight) / 100) *
+								impact.perGame) /
+							bestPerGame
+						: 0;
+				value.points = value.contributionPoints + value.perGamePoints;
+				player.breakdown.contribution += value.contributionPoints;
+				player.breakdown.perGame += value.perGamePoints;
 			}
+		}
+		const mostGames = Math.max(
+			0,
+			...candidates.map((player) => player.known),
+		);
+		for (const player of candidates) {
+			player.breakdown.games =
+				(awardScoring.games * player.known) / mostGames;
+			player.score =
+				player.breakdown.contribution +
+				player.breakdown.perGame +
+				player.breakdown.games;
 		}
 		const ranked = candidates
 			.filter((player) => player.score > 0)
@@ -317,12 +362,10 @@ export function positionRankings(model: Model, matches: Match[]) {
 		return {
 			...definition,
 			candidates: ranked,
-			excludedPlayers: grouped.size - ranked.length,
+			insufficientDataPlayers,
+			noContributionPlayers,
+			consideredPlayers: grouped.size,
 		};
 	});
-	return {
-		roles,
-		minimumAppearances,
-		unclassifiedAppearances: rows.filter((row) => !roleOf(row)).length,
-	};
+	return { roles };
 }

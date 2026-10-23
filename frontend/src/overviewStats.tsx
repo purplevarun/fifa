@@ -1,6 +1,6 @@
 import { ArrowRight, Trophy } from "lucide-react";
 import type { CSSProperties } from "react";
-import { positionRankings, scoringFeats } from "./analytics";
+import { awardScoring, positionRankings, scoringFeats } from "./analytics";
 import { useCareer } from "./context";
 import { dateLabel, display } from "./data";
 import { CareerLink, DataTable, Empty, Pill, SectionHeading } from "./ui";
@@ -9,20 +9,19 @@ export function PositionLeaders() {
 	const { model, matches } = useCareer();
 	const rankings = positionRankings(model, matches);
 	return (
-		<section
-			className="position-leaders"
-			aria-label="Best players by position"
-		>
-			<SectionHeading title="Best players by position">
+		<section className="position-leaders" aria-label="Performance awards">
+			<SectionHeading title="Performance awards">
 				<Pill>Stats-based / selected fixtures</Pill>
 			</SectionHeading>
 			<p className="muted position-intro">
-				Weighted performance per appearance, not FIFA overall ratings.
+				Every player is considered for every award, regardless of
+				position. {awardScoring.contribution}% contribution /{" "}
+				{awardScoring.perGame}% per-game performance /{" "}
+				{awardScoring.games}% games played.
 			</p>
 			<div className="position-grid">
 				{rankings.roles.map((group) => {
 					const winner = group.candidates[0];
-					const isPlaymaker = group.role === "playmaker";
 					return (
 						<article
 							key={group.role}
@@ -39,9 +38,8 @@ export function PositionLeaders() {
 								<Trophy size={16} aria-hidden="true" />
 							</div>
 							<div className="tiny muted">
-								{isPlaymaker
-									? "All outfield positions"
-									: group.positions.join(" / ")}
+								All positions · {group.consideredPlayers}{" "}
+								players considered
 							</div>
 							{winner ? (
 								<>
@@ -65,11 +63,10 @@ export function PositionLeaders() {
 									/>
 									<p className="position-coverage">
 										{winner.known}/{winner.total}{" "}
-										{isPlaymaker
-											? "complete outfield appearances"
-											: "complete appearances in this role"}
+										appearances with complete scoring data
 									</p>
-									{winner.known < 5 && (
+									{winner.known <
+										awardScoring.provisionalAppearances && (
 										<Pill tone="warning">
 											Provisional · fewer than 5
 											appearances
@@ -81,25 +78,63 @@ export function PositionLeaders() {
 											appearances excluded
 										</Pill>
 									)}
+									<dl
+										className="award-breakdown"
+										aria-label={`${group.title} score breakdown`}
+									>
+										<div>
+											<dt>Total contribution</dt>
+											<dd>
+												{display(
+													winner.breakdown
+														.contribution,
+													1,
+												)}{" "}
+												/ {awardScoring.contribution}
+											</dd>
+										</div>
+										<div>
+											<dt>Per-game performance</dt>
+											<dd>
+												{display(
+													winner.breakdown.perGame,
+													1,
+												)}{" "}
+												/ {awardScoring.perGame}
+											</dd>
+										</div>
+										<div>
+											<dt>Games played</dt>
+											<dd>
+												{display(
+													winner.breakdown.games,
+													1,
+												)}{" "}
+												/ {awardScoring.games}
+											</dd>
+										</div>
+									</dl>
 									<dl className="position-metrics">
 										{winner.metrics.map((component) => (
 											<div key={component.field}>
 												<dt>
 													{component.label}
 													<small>
-														{component.weight}%
-														weight
+														{component.weight}% of
+														stat components
 													</small>
 												</dt>
 												<dd
 													title={`${display(component.total)} across ${winner.known} complete appearances; ${display(component.points, 1)} score points`}
 												>
-													{display(
-														component.perAppearance,
-														2,
-													)}
+													{display(component.total)}{" "}
+													total
 													<small>
-														per appearance
+														{display(
+															component.perAppearance,
+															2,
+														)}{" "}
+														per game
 													</small>
 												</dd>
 											</div>
@@ -133,18 +168,29 @@ export function PositionLeaders() {
 								</>
 							) : (
 								<div className="position-no-winner">
-									<strong>No eligible player</strong>
+									<strong>
+										No player with enough scoring data
+									</strong>
 									<p>
-										Needs {rankings.minimumAppearances}{" "}
-										complete appearances, at least 80% stat
-										coverage and a positive score.
+										Needs recorded category stats in at
+										least{" "}
+										{awardScoring.minimumCoverage * 100}% of
+										appearances and a measured contribution.
+										Games alone cannot earn an award.
 									</p>
 								</div>
 							)}
-							{group.excludedPlayers > 0 && (
+							{group.insufficientDataPlayers > 0 && (
 								<p className="tiny muted">
-									{group.excludedPlayers} players below the
-									eligibility requirements
+									{group.insufficientDataPlayers} players lack
+									enough recorded stats for this award; no
+									position restriction.
+								</p>
+							)}
+							{group.noContributionPlayers > 0 && (
+								<p className="tiny muted">
+									{group.noContributionPlayers} players have
+									no measured contribution in these stats.
 								</p>
 							)}
 						</article>
@@ -152,29 +198,32 @@ export function PositionLeaders() {
 				})}
 			</div>
 			<details className="stats-methodology">
-				<summary>How the position scores work</summary>
+				<summary>How the award scores work</summary>
 				<p>
 					Only Notts County appearances in the selected season,
-					competition and preseason scope count. The recorded match
-					position takes priority; otherwise the first displayed
-					position is used. Players who change roles are scored
-					separately in each role.
+					competition and preseason scope count. Every player can rank
+					for every award, including players with unknown positions.
+					Position changes never split their records. These are
+					statistical awards, not FIFA overall ratings.
 				</p>
 				<p>
-					Playmaker is an additional 50% goals / 50% assists ranking
-					across all recognised outfield appearances. Players remain
-					eligible for their usual position category too; goalkeeper
-					appearances and unknown positions do not count towards
-					playmaker scores.
+					{awardScoring.contribution}% rewards accumulated
+					contribution, {awardScoring.perGame}% rewards per-game
+					performance, and {awardScoring.games}% rewards games played.
+					The stat weights below apply inside both performance
+					components. Each total and per-game rate is divided by the
+					best recorded value for that metric among scored candidates;
+					games points are {awardScoring.games} × complete appearances
+					/ most complete appearances in that candidate pool.
 				</p>
 				<p>
-					Each component is averaged over the same complete
-					appearances and divided by the best eligible player's
-					average in that role, then multiplied by its weight. A
-					component that is zero for everyone contributes zero. For
-					goals conceded, the factor is (1 + lowest average) / (1 +
-					player average). Scores are relative within a role, not
-					comparable across roles or filter selections.
+					For example, comparing only a 3-goal debut with 100 goals in
+					100 games (both with no assists), the forward scores are
+					21.6 and 69.7 respectively. Sustained production outweighs a
+					one-game spike. A metric that is zero for everyone earns
+					zero, and games alone cannot turn zero contribution into a
+					winner. Scores are relative within each award and filter
+					selection, not comparable across awards.
 				</p>
 				<ul>
 					{rankings.roles.map((group) => (
@@ -190,26 +239,29 @@ export function PositionLeaders() {
 					))}
 				</ul>
 				<p>
-					Eligibility: {rankings.minimumAppearances} complete
-					appearances in the role (5, or the number of selected
-					fixtures if fewer) and at least 80% complete records.
-					Unknown stats are excluded, not replaced with zeros. Ties
-					use more complete appearances, then player name. Under 5
-					appearances is provisional. Minutes are not consistently
-					recorded, so these are per-appearance, not per-90 scores.
+					At least one complete appearance and{" "}
+					{awardScoring.minimumCoverage * 100}% coverage of all
+					selected appearances are required. All components use the
+					same complete records, including games points, so missing
+					stats do not inflate experience. Unknown values are never
+					replaced with zeros. Players lacking goalkeeper statistics,
+					for example, cannot receive a meaningful goalkeeper
+					score—not because of their position. Under{" "}
+					{awardScoring.provisionalAppearances} complete appearances
+					is provisional, not excluded. Ties use more complete
+					appearances, then name. Minutes are not consistently
+					recorded, so these are not per-90 scores.
 				</p>
 				<p>
 					Defensive actions mean interceptions + blocks + clearances.
 					Saves mean shots caught + parried. Goalkeeper clean sheets
 					require a recorded zero goals-conceded value; this is an
-					appearance measure, not a 90-minute clean-sheet award.
+					appearance measure, not a 90-minute clean-sheet award. For
+					goals conceded, quality is 1 / (1 + goals conceded per
+					game); accumulated contribution is that quality × complete
+					appearances. This rewards sustained prevention, never
+					conceding more goals.
 				</p>
-				{rankings.unclassifiedAppearances > 0 && (
-					<p>
-						{rankings.unclassifiedAppearances} appearances have no
-						recognised position and are excluded.
-					</p>
-				)}
 			</details>
 		</section>
 	);

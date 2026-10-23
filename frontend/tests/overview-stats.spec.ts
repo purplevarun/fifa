@@ -74,16 +74,18 @@ test("position leaders and hat-trick evidence work with filters on desktop and m
 	await page.goto("/");
 	for (const [title, name] of [
 		["Best forward", "Test Forward"],
-		["Best midfielder", "Test Midfielder"],
+		["Best midfielder", "Test Defender"],
 		["Best defender", "Test Defender"],
 		["Best goalkeeper", "Test Goalkeeper"],
 		["Best playmaker", "Test Forward"],
 	]) {
 		const card = page.getByRole("article", { name: title, exact: true });
 		await expect(card).toContainText(
-			title === "Best playmaker"
-				? "4/4 complete outfield appearances"
-				: "4/4 complete appearances",
+			"4/4 appearances with complete scoring data",
+		);
+		await expect(card).toContainText("All positions");
+		await expect(card.getByLabel(`${title} score breakdown`)).toContainText(
+			"Games played",
 		);
 		await expect(
 			card.getByRole("link", { name, exact: true }),
@@ -101,7 +103,7 @@ test("position leaders and hat-trick evidence work with filters on desktop and m
 	).toBe(isMobile ? 1 : 5);
 	await page.locator(".stats-methodology > summary").click();
 	await expect(page.locator(".stats-methodology")).toContainText(
-		"per-appearance, not per-90",
+		"not per-90",
 	);
 	const feats = page.getByRole("region", {
 		name: "Recorded hat-tricks",
@@ -129,7 +131,7 @@ test("position leaders and hat-trick evidence work with filters on desktop and m
 		.selectOption(fixture.competitions[0].id);
 	await expect(
 		page.getByRole("article", { name: "Best forward", exact: true }),
-	).toContainText("2/2 complete appearances");
+	).toContainText("2/2 appearances with complete scoring data");
 	await feats.getByRole("link", { name: "All scoring feats" }).click();
 	await expect(
 		page.getByRole("heading", { name: "Career records", exact: true }),

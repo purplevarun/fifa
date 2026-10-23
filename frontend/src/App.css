@@ -639,6 +639,31 @@
 		font-size: 12px;
 	}
 
+	.award-breakdown {
+		background: var(--soft);
+		border-radius: 4px;
+		padding: 8px 10px;
+		margin: 8px 0;
+		font-size: 11px;
+	}
+
+	.award-breakdown > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 4px 0;
+	}
+
+	.award-breakdown dt {
+		color: var(--muted);
+	}
+
+	.award-breakdown dd {
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
 	.position-metrics > div {
 		display: flex;
 		justify-content: space-between;

@@ -30,7 +30,7 @@ try {
 		await development.ssrLoadModule("/src/data.ts");
 	const { CareerContext } =
 		await development.ssrLoadModule("/src/context.ts");
-	const { positionRankings, scoringFeats } =
+	const { awardScoring, positionRankings, scoringFeats } =
 		await development.ssrLoadModule("/src/analytics.ts");
 	const { splitJoinedWords } =
 		await development.ssrLoadModule("/src/vocabulary.ts");
@@ -84,7 +84,17 @@ try {
 		"Hat-tricks must match individual 3+ goal performances",
 	);
 	const positionLeaders = positionRankings(model, context.matches).roles;
+	const consideredPlayers = new Set(
+		published.player_matches
+			.filter((row) => row.club_id === model.nottsId)
+			.map((row) => row.player_id),
+	).size;
 	for (const group of positionLeaders) {
+		assert.equal(
+			group.consideredPlayers,
+			consideredPlayers,
+			"Every award must consider all recorded Notts players",
+		);
 		for (const candidate of group.candidates) {
 			assert.ok(
 				Number.isFinite(candidate.score) &&
@@ -93,9 +103,43 @@ try {
 			);
 			assert.ok(
 				candidate.known <= candidate.total &&
-					candidate.known / candidate.total >= 0.8,
+					candidate.known / candidate.total >=
+						awardScoring.minimumCoverage,
 			);
+			assert.ok(
+				Math.abs(
+					Object.values(candidate.breakdown).reduce(
+						(sum, points) => sum + points,
+						0,
+					) - candidate.score,
+				) < 1e-9,
+			);
+			for (const [component, points] of Object.entries(
+				candidate.breakdown,
+			)) {
+				assert.ok(
+					points >= 0 && points <= awardScoring[component] + 1e-9,
+				);
+			}
 		}
+	}
+	const kubo = published.players.find(
+		(player) => player.name === "Takefusa Kubo",
+	);
+	const kuboRows = published.player_matches.filter(
+		(row) => row.player_id === kubo?.id && row.club_id === model.nottsId,
+	);
+	if (
+		kuboRows.length &&
+		kuboRows.every((row) => row.goals !== null && row.assists !== null) &&
+		kuboRows.some((row) => row.goals > 0 || row.assists > 0)
+	) {
+		assert.ok(
+			positionLeaders
+				.find((group) => group.role === "forward")
+				.candidates.some((player) => player.id === kubo.id),
+			"Kubo must not be excluded from forward because of his position",
+		);
 	}
 	for (const [path, Component] of [
 		["/", pages.Overview],
@@ -167,11 +211,13 @@ try {
 				appearances: published.player_matches.length,
 				hat_tricks: feats.hatTricks.length,
 				vocabulary_repaired_descriptions: repairedDescriptions,
+				award_scoring: awardScoring,
 				position_leaders: positionLeaders.map((group) => ({
 					role: group.role,
 					player: group.candidates[0]?.name ?? null,
 					score: group.candidates[0]?.score ?? null,
 					complete_appearances: group.candidates[0]?.known ?? 0,
+					breakdown: group.candidates[0]?.breakdown ?? null,
 				})),
 			},
 			null,

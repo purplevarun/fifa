@@ -3,9 +3,9 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { fixture } from "../tests/fixture";
 import {
+	awardScoring,
 	positionDefinitions,
 	positionRankings,
-	positionRole,
 	scoringFeats,
 } from "./analytics";
 import { CareerRecords } from "./archive";
@@ -31,7 +31,9 @@ function career(rows: TestPerformance[], matchCount = 1) {
 		matches: Array.from({ length: matchCount }, (_, index) => ({
 			...fixture.matches[0],
 			id: `match-${index}`,
-			played_on: `2018-08-${String(index + 1).padStart(2, "0")}`,
+			played_on: new Date(Date.UTC(2018, 7, index + 1))
+				.toISOString()
+				.slice(0, 10),
 		})),
 		player_snapshots: [],
 		player_competition_snapshots: [],
@@ -300,9 +302,15 @@ describe("position rankings", () => {
 			"Stopper",
 			"Keeper",
 		]);
-		expect(roles.map((role) => role.candidates[0].score)).toEqual([
-			80, 50, 92.5, 91, 100,
-		]);
+		const expected = [83, 57.5, 66.425, 92.35, 100];
+		roles.forEach((role, index) =>
+			expect(role.candidates[0].score).toBeCloseTo(expected[index]),
+		);
+		expect(
+			awardScoring.contribution +
+				awardScoring.perGame +
+				awardScoring.games,
+		).toBe(100);
 		for (const group of roles) {
 			expect(
 				group.metrics.reduce(
@@ -310,19 +318,78 @@ describe("position rankings", () => {
 					0,
 				),
 			).toBe(100);
-			for (const player of group.candidates)
+			for (const player of group.candidates) {
 				expect(player.score).toBeGreaterThan(0);
+				expect(player.score).toBeLessThanOrEqual(100 + 1e-9);
+				expect(
+					Object.values(player.breakdown).reduce(
+						(sum, value) => sum + value,
+						0,
+					),
+				).toBeCloseTo(player.score);
+				expect(
+					player.metrics.reduce(
+						(sum, metric) => sum + metric.points,
+						0,
+					),
+				).toBeCloseTo(
+					player.breakdown.contribution + player.breakdown.perGame,
+				);
+			}
 		}
 	});
-	it.each(
-		positionDefinitions.flatMap((group) =>
-			group.positions.map((position) => ({ position, role: group.role })),
-		),
-	)("classifies $position as $role", ({ position, role }) => {
-		expect(positionRole(position)).toBe(role);
-		expect(positionRole(` ${position.toLowerCase()} / CM `)).toBe(role);
-	});
-	it("prefers recorded match positions and does not use a future snapshot to recategorise old games", () => {
+	it.each([
+		"ST",
+		"CF",
+		"LW",
+		"RW",
+		"LF",
+		"RF",
+		"CM",
+		"CAM",
+		"CDM",
+		"LM",
+		"RM",
+		"CB",
+		"LB",
+		"RB",
+		"LWB",
+		"RWB",
+		"GK",
+		null,
+		"unknown",
+	])(
+		"considers position %s for every award when the stats exist",
+		(position) => {
+			const model = career([
+				{
+					player_id: "Versatile",
+					displayed_position: position,
+					played_position: position,
+					goals: 1,
+					assists: 1,
+					passes_completed_short: 10,
+					key_passes: 1,
+					tackles_won: 1,
+					interceptions: 1,
+					blocks: 1,
+					clearances: 1,
+					shots_caught: 1,
+					shots_parried: 1,
+				},
+			]);
+			for (const award of positionRankings(model, model.matches).roles) {
+				expect(award.consideredPlayers).toBe(1);
+				expect(award.candidates[0]).toMatchObject({
+					name: "Versatile",
+					known: 1,
+					total: 1,
+					score: 100,
+				});
+			}
+		},
+	);
+	it("combines all games despite position changes or future profile snapshots", () => {
 		const rows = repeat("Versatile", 10).map((row, index) => ({
 			...row,
 			displayed_position: "CB",
@@ -344,27 +411,27 @@ describe("position rankings", () => {
 		const { roles } = positionRankings(model, model.matches);
 		expect(roles[0].candidates[0]).toMatchObject({
 			name: "Versatile",
-			known: 5,
-			total: 5,
+			known: 10,
+			total: 10,
 		});
 		expect(
 			roles.find((role) => role.role === "midfielder")?.candidates[0],
 		).toMatchObject({
 			name: "Versatile",
-			known: 5,
-			total: 5,
+			known: 10,
+			total: 10,
 		});
-		expect(
-			roles.find((role) => role.role === "defender")?.candidates,
-		).toEqual([]);
-		expect(
-			roles.find((role) => role.role === "goalkeeper")?.candidates,
-		).toEqual([]);
+		for (const role of roles)
+			expect(role.candidates[0]).toMatchObject({
+				name: "Versatile",
+				known: 10,
+				total: 10,
+			});
 		expect(
 			roles.find((role) => role.role === "playmaker")?.candidates[0],
 		).toMatchObject({ name: "Versatile", known: 10, total: 10 });
 	});
-	it("keeps playmakers eligible for their positions, and excludes GK, opponents and unknown positions", () => {
+	it("allows keepers and unknown positions to win attacking awards but excludes opponents", () => {
 		const model = career(
 			[
 				...repeat("Striker", 5).map((row) => ({
@@ -407,7 +474,7 @@ describe("position rankings", () => {
 			5,
 		);
 		const { roles } = positionRankings(model, model.matches);
-		expect(roles[0].candidates[0].name).toBe("Striker");
+		expect(roles[0].candidates[0].name).toBe("Keeper");
 		expect(
 			roles.find((role) => role.role === "midfielder")?.candidates[0]
 				.name,
@@ -416,11 +483,13 @@ describe("position rankings", () => {
 			(role) => role.role === "playmaker",
 		)!.candidates;
 		expect(playmakers.map((row) => row.name)).toEqual([
+			"Keeper",
+			"Unknown",
 			"Creator",
 			"Striker",
 			"Creative defender",
 		]);
-		expect(playmakers[0].score).toBe(62.5);
+		expect(playmakers[0].score).toBe(100);
 		expect(playmakers[0].metrics.map((metric) => metric.weight)).toEqual([
 			50, 50,
 		]);
@@ -430,7 +499,7 @@ describe("position rankings", () => {
 		).roles.find((role) => role.role === "playmaker")!;
 		expect(selected.candidates[0]).toMatchObject({ known: 1, total: 1 });
 	});
-	it("averages appearances, excludes opponents, deduplicates and breaks ties by sample size", () => {
+	it("rewards more games at the same rate without counting duplicate or opponent records", () => {
 		const model = career(
 			[
 				...repeat("Regular", 6),
@@ -450,14 +519,17 @@ describe("position rankings", () => {
 			"Regular",
 			"Reserve",
 		]);
-		expect(candidates.map((player) => player.score)).toEqual([80, 80]);
+		expect(candidates[0].score).toBeCloseTo(83);
+		expect(candidates[1].score).toBeCloseTo(72.5);
+		expect(candidates[0].breakdown.games).toBe(15);
+		expect(candidates[1].breakdown.games).toBe(12.5);
 		expect(candidates.map((player) => player.total)).toEqual([6, 5]);
 		expect(candidates[0].metrics[0]).toMatchObject({
 			total: 6,
 			perAppearance: 1,
 		});
 	});
-	it("requires five complete appearances and 80% coverage on the same rows", () => {
+	it("requires 80% coverage and uses only the same complete games in every component", () => {
 		const partial = repeat("Eligible partial", 6).map((row, index) => ({
 			...row,
 			assists: index === 5 ? null : 0,
@@ -471,19 +543,147 @@ describe("position rankings", () => {
 			7,
 		);
 		const result = positionRankings(model, model.matches);
-		expect(result.minimumAppearances).toBe(5);
-		expect(result.roles[0].candidates).toHaveLength(1);
+		expect(result.roles[0].candidates).toHaveLength(2);
 		expect(result.roles[0].candidates[0]).toMatchObject({
 			name: "Eligible partial",
 			known: 5,
 			total: 6,
 		});
 		expect(result.roles[0].candidates[0].metrics[0].total).toBe(5);
-		expect(result.roles[0].excludedPlayers).toBe(2);
+		expect(result.roles[0].insufficientDataPlayers).toBe(1);
+		expect(result.roles[0].candidates[0].breakdown.games).toBe(15);
+		expect(result.roles[0].candidates[1].breakdown.games).toBe(12);
 		const html = render(model);
-		expect(html).toContain("5/6 complete appearances in this role");
+		expect(html).toContain("5/6 appearances with complete scoring data");
 		expect(html).toContain(
 			"Partial data · incomplete appearances excluded",
+		);
+	});
+	it("ranks 100 goals in 100 games above a hat-trick on debut without excluding the debutant", () => {
+		const model = career(
+			[...repeat("Veteran", 100), { player_id: "Debutant", goals: 3 }],
+			100,
+		);
+		const candidates = positionRankings(model, model.matches).roles[0]
+			.candidates;
+		expect(candidates.map((player) => player.name)).toEqual([
+			"Veteran",
+			"Debutant",
+		]);
+		expect(candidates[0].score).toBeCloseTo(69.6666667);
+		expect(candidates[1].score).toBeCloseTo(21.59);
+		expect(candidates[0].breakdown).toMatchObject({
+			contribution: 48,
+			games: 15,
+		});
+		expect(candidates[1].known).toBe(1);
+		expect(candidates[1].breakdown.games).toBeCloseTo(0.15);
+		expect(
+			positionDefinitions
+				.find((group) => group.role === "forward")!
+				.metrics.map((metric) => metric.weight),
+		).toEqual([80, 20]);
+		expect(
+			positionDefinitions
+				.find((group) => group.role === "playmaker")!
+				.metrics.map((metric) => metric.weight),
+		).toEqual([50, 50]);
+	});
+	it("balances quality with longevity rather than rewarding attendance alone", () => {
+		const model = career(
+			[
+				...repeat("Quality", 50).map((row) => ({ ...row, goals: 2 })),
+				...repeat("Veteran", 100),
+				...repeat("No production", 100).map((row) => ({
+					...row,
+					goals: 0,
+				})),
+			],
+			100,
+		);
+		const candidates = positionRankings(model, model.matches).roles[0]
+			.candidates;
+		expect(candidates.map((player) => player.name)).toEqual([
+			"Quality",
+			"Veteran",
+		]);
+		expect(candidates[0].score).toBeCloseTo(75.5);
+		expect(candidates[1].score).toBeCloseTo(73);
+	});
+	it("applies the longevity balance to every award, including goalkeeper stats", () => {
+		const model = career(
+			[
+				...repeat("Experienced", 100).map((row) => ({
+					...row,
+					assists: 1,
+					passes_completed_short: 10,
+					key_passes: 1,
+					tackles_won: 1,
+					interceptions: 1,
+					shots_caught: 1,
+				})),
+				{
+					player_id: "Debutant",
+					displayed_position: "ST",
+					goals: 3,
+					assists: 3,
+					passes_completed_short: 30,
+					key_passes: 3,
+					tackles_won: 3,
+					interceptions: 3,
+					shots_caught: 3,
+				},
+			],
+			100,
+		);
+		for (const award of positionRankings(model, model.matches).roles) {
+			expect(award.candidates.map((player) => player.name)).toEqual([
+				"Experienced",
+				"Debutant",
+			]);
+		}
+	});
+	it("does not reward conceding more, fabricate saves, or count unrelated missing games", () => {
+		const model = career(
+			[
+				...repeat("Lower conceded", 5).map((row) => ({
+					...row,
+					shots_caught: 2,
+					goals_conceded: 1,
+				})),
+				...repeat("Higher conceded", 5).map((row) => ({
+					...row,
+					shots_caught: 2,
+					goals_conceded: 3,
+				})),
+				{
+					player_id: "No keeper data",
+					shots_caught: null,
+					shots_parried: null,
+					goals_conceded: null,
+				},
+			],
+			5,
+		);
+		const keepers = positionRankings(model, model.matches).roles.find(
+			(group) => group.role === "goalkeeper",
+		)!;
+		expect(keepers.candidates.map((player) => player.name)).toEqual([
+			"Lower conceded",
+			"Higher conceded",
+		]);
+		expect(
+			keepers.candidates[0].metrics.find(
+				(metric) => metric.field === "goals_conceded",
+			)!.points,
+		).toBeGreaterThan(
+			keepers.candidates[1].metrics.find(
+				(metric) => metric.field === "goals_conceded",
+			)!.points,
+		);
+		expect(keepers.insufficientDataPlayers).toBe(1);
+		expect(render(model)).toContain(
+			"players lack enough recorded stats for this award; no position restriction",
 		);
 	});
 	it.each([null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -1])(
@@ -494,24 +694,36 @@ describe("position rankings", () => {
 				{
 					player_id: "Midfield",
 					displayed_position: "CM",
+					key_passes: 2,
 					passes_completed_medium: value,
 				},
 				{
 					player_id: "Defence",
 					displayed_position: "CB",
+					tackles_won: 2,
 					blocks: value,
 				},
 				{
 					player_id: "Keeper",
 					displayed_position: "GK",
+					shots_caught: 2,
 					shots_parried: value,
 				},
 			]);
-			expect(
-				positionRankings(model, model.matches).roles.every(
-					(group) => group.candidates.length === 0,
-				),
-			).toBe(true);
+			const roles = positionRankings(model, model.matches).roles;
+			for (const [role, player] of [
+				["forward", "Forward"],
+				["midfielder", "Midfield"],
+				["defender", "Defence"],
+				["goalkeeper", "Keeper"],
+			])
+				expect(
+					roles
+						.find((group) => group.role === role)!
+						.candidates.some(
+							(candidate) => candidate.name === player,
+						),
+				).toBe(false);
 		},
 	);
 	it("never assumes a clean sheet when goalkeeper goals conceded are missing", () => {
@@ -534,12 +746,18 @@ describe("position rankings", () => {
 			{ player_id: "Zero" },
 			{ player_id: "Unknown", displayed_position: null, goals: 20 },
 		]);
-		expect(positionRankings(model, model.matches)).toMatchObject({
-			unclassifiedAppearances: 1,
-		});
 		expect(
-			positionRankings(model, model.matches).roles[0].candidates,
-		).toEqual([]);
+			positionRankings(model, model.matches).roles[0].consideredPlayers,
+		).toBe(2);
+		expect(
+			positionRankings(model, model.matches).roles[0].candidates.map(
+				(player) => player.name,
+			),
+		).toEqual(["Unknown"]);
+		expect(
+			positionRankings(model, model.matches).roles[0]
+				.noContributionPlayers,
+		).toBe(1);
 		expect(
 			positionRankings(model, []).roles.every(
 				(group) => group.candidates.length === 0,
@@ -581,12 +799,18 @@ describe("position rankings", () => {
 		expect(
 			html.match(/Provisional · fewer than 5 appearances/g),
 		).toHaveLength(5);
-		expect(html).toContain("80% weight");
-		expect(html).toContain("20% weight");
-		expect(html).toContain("50% weight");
-		expect(html).toContain("All outfield positions");
-		expect(html).toContain("10% weight");
-		expect(html).toContain("How the position scores work");
+		expect(html).toContain("80% of stat components");
+		expect(html).toContain("20% of stat components");
+		expect(html).toContain("50% of stat components");
+		expect(html).toContain("All positions");
+		expect(html).toContain("10% of stat components");
+		expect(html).toContain("How the award scores work");
+		expect(html).toContain(
+			"60% contribution / 25% per-game performance / 15% games played",
+		);
+		expect(html.match(/score breakdown/g)).toHaveLength(5);
+		expect(html).toContain("Games played");
+		expect(html).not.toContain("All outfield positions");
 		expect(html).toContain("Match-by-match breakdown (1)");
 		expect(html).toContain('href="/matches/match-0"');
 		expect(html).toContain("not per-90 scores");

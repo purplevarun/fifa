@@ -84,42 +84,61 @@ only recorded match ratings, not player overall ratings. Passing totals require
 all three distance components for each counted appearance. Unknown measurements
 are excluded, partial totals are marked, and chart tooltips show record coverage.
 
-### Best Players by Position
+### Performance Awards
 
-The homepage also shows a winner and up to two runners-up for each role, following
-all active filters. These are custom stats-based scores, not FIFA overall ratings
-or official awards. The cards expose their weights, per-appearance measurements,
-coverage and an expandable explanation.
+The homepage shows a winner and up to two runners-up for forward, playmaker,
+midfielder, defender and goalkeeper, in that order. **Every recorded Notts County
+player is considered for every award, regardless of displayed or played position.**
+Kubo's CAM label therefore does not exclude him from best forward. Unknown
+positions and position changes do not exclude or split appearances either.
+These are custom statistical awards, not FIFA overall ratings or official honours.
 
-| Role                               | Weights                                                                      |
-| ---------------------------------- | ---------------------------------------------------------------------------- |
-| Forward (ST, CF, LW, RW, LF, RF)   | 80% goals + 20% assists                                                      |
-| Midfielder (CM, CAM, CDM, LM, RM)  | 40% completed passes + 50% key passes + 10% tackles won                      |
-| Defender (CB, LB, RB, LWB, RWB)    | 45% tackles won + 45% interceptions/blocks/clearances + 10% completed passes |
-| Goalkeeper                         | 50% saves (caught + parried) + 30% clean sheets + 20% fewer goals conceded   |
-| Playmaker (all outfield positions) | 50% goals + 50% assists                                                      |
+Scores combine **60% accumulated contribution + 25% per-game performance + 15%
+games played**. Total contribution has the largest share so sustained production
+matters; per-game performance retains a quality measure, while the smaller games
+component rewards repeated participation without making attendance sufficient.
 
-Each component uses the same complete appearances, averages per appearance, and
-is scaled against the best eligible average within that role before weighting.
-An all-zero component contributes zero. For goals conceded, the scaling factor is
-`(1 + lowest average) / (1 + player average)`. Scores are out of 100 but are not
-comparable between roles or filter selections. Minutes are not consistently
-recorded, so per-90 statistics are not invented.
+The following stat weights apply **inside both** the contribution and per-game
+components, rather than directly to the final 100-point score:
 
-Eligibility requires five complete appearances in that role (or the number of
-selected fixtures if fewer), at least 80% complete records, and a positive score.
-Incomplete appearances are excluded rather than filled with zeros, and samples
-under five are marked provisional. Ties use more complete appearances, then name.
-Recorded match positions take priority; otherwise the first displayed position
-is used. Role changes are scored separately, and unknown positions are excluded.
-Goalkeeper clean sheets require a recorded zero goals-conceded value, without
-claiming that the player completed 90 minutes.
+| Award      | Stat weights                                                                 |
+| ---------- | ---------------------------------------------------------------------------- |
+| Forward    | 80% goals + 20% assists                                                      |
+| Playmaker  | 50% goals + 50% assists                                                      |
+| Midfielder | 40% completed passes + 50% key passes + 10% tackles won                      |
+| Defender   | 45% tackles won + 45% interceptions/blocks/clearances + 10% completed passes |
+| Goalkeeper | 50% saves (caught + parried) + 30% clean sheets + 20% fewer goals conceded   |
 
-Playmaker is an additional overlapping contribution category, not a new match
-position. All recognised outfield appearances qualify, including those by
-defenders; goalkeepers and unknown positions do not. A player can feature in
-both the playmaker ranking and their usual positional ranking. Outfield
-appearances across position changes are combined for playmaker eligibility.
+Each metric total is divided by the highest eligible total for that metric, then
+weighted inside the 60-point component. Its per-game rate is separately divided
+by the best eligible rate and weighted inside the 25-point component. Games points
+are `15 × complete appearances / most complete appearances` in that award's scored
+candidate pool. All components follow the season, competition and preseason filters.
+
+For goals conceded, lower is better: quality is `1 / (1 + goals conceded per game)`.
+Its accumulated contribution is quality multiplied by complete appearances;
+both are normalised against the best eligible values. This rewards sustained
+prevention rather than accidentally rewarding more goals conceded. Clean sheets
+require a recorded zero goals-conceded value, not an invented 90-minute appearance.
+
+**Example:** comparing 3 goals on debut against 100 goals in 100 games, with zero
+assists for both, the forward scores are **21.6 versus 69.7**. The debutant remains
+considered but cannot win that comparison. A 50-game player with the same 100 goals
+can beat the 100-game player because the higher scoring rate still matters.
+
+At least one complete appearance and **80% coverage of all selected appearances**
+are needed for a meaningful score. The same complete records supply totals, rates
+and games points: missing values are never converted to zeros or projected into
+unobserved games. A player with no recorded saves/conceded data cannot receive a
+goalkeeper score, irrespective of their position; the card explains missing-data
+exclusions. Under five complete appearances is provisional, not disqualifying.
+Games alone cannot earn an award when all its contribution metrics are zero.
+
+Cards show each score component, raw totals, per-game rates and record coverage.
+Ties use more complete appearances, then name. An all-zero metric contributes zero
+without redistributing its weight. Scores are relative within each award and
+filter selection, not comparable across awards or filters. Minutes are not
+consistently recorded, so per-90 statistics are not invented.
 
 ### Recorded Hat-tricks
 

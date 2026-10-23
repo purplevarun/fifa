@@ -85,28 +85,36 @@ JSON was verified without widening filesystem access.
 
 ## Stats-based role leaders
 
-With all current fixtures selected, including preseason:
+Updated 23 October 2026: every recorded player is considered for every award,
+regardless of position. The previous CAM/forward and other position filters are
+removed. Missing statistics still remain unknown rather than being fabricated.
 
-| Role       | Leader                | Relative score / 100 | Complete appearances in role |
-| ---------- | --------------------- | -------------------- | ---------------------------- |
-| Forward    | Dominic Calvert-Lewin | 93.4                 | 71                           |
-| Midfielder | Danny Williams        | 85.6                 | 159                          |
-| Defender   | Tosin Adarabioyo      | 99.3                 | 78                           |
-| Goalkeeper | Frederik Schram       | 100.0                | 30                           |
-| Playmaker  | Takefusa Kubo         | 85.3                 | 147                          |
+Scores now use **60% accumulated contribution, 25% per-game performance and 15%
+games played**, retaining each award's internal stat weights. With all current
+fixtures selected, including preseason:
 
-Forward now uses 80% goals / 20% assists. Playmaker uses 50% goals / 50% assists
-across recognised outfield appearances and does not replace a player's usual
-position category. All other weights and eligibility rules are unchanged.
+| Award      | Leader         | Relative score / 100 | Complete appearances used |
+| ---------- | -------------- | -------------------- | ------------------------- |
+| Forward    | Takefusa Kubo  | 94.8                 | 147                       |
+| Playmaker  | Takefusa Kubo  | 95.2                 | 147                       |
+| Midfielder | Danny Williams | 89.4                 | 159                       |
+| Defender   | Danny Williams | 95.7                 | 159                       |
+| Goalkeeper | Aaron Ramsdale | 97.3                 | 140                       |
 
-These are custom weighted per-appearance scores, not FIFA overall ratings or
-cross-position comparisons. Results change with the filters. Weights, complete
-record coverage, eligibility and the normalisation formula are shown on the
-homepage and documented in [README.md](../README.md#best-players-by-position).
+The debut-hat-trick regression compares 3 goals in one appearance against 100
+goals in 100 appearances (no assists): the forward scores are **21.6 versus 69.7**.
+Both players remain candidates; the experienced player's sustained contribution
+outweighs the debutant's scoring-rate spike. Samples under five are provisional,
+not excluded. At least 80% of selected appearances need the relevant category stats.
+
+The homepage exposes the contribution/rate/games breakdown and raw totals.
+Results change with the filters; these are not FIFA ratings or cross-award
+comparisons. The full formula and missing-data rules are documented in
+[README.md](../README.md#performance-awards).
 
 ## Verification
 
-- 134 frontend unit/render tests passed, including 22 vocabulary cases.
+- 140 frontend unit/render tests passed, including the debut-veteran and universal-eligibility regressions.
 - Python suite passed: 206 tests passed, 26 optional tests skipped.
 - Frontend lint, production build, real-data score checks, eight server-rendered
   views, and development/production JSON checks passed.
