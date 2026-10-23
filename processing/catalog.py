@@ -414,7 +414,7 @@ def coverage_report(connection, club_name="Notts County"):
         "minutes_played",
     )
     players = [player for group in players_by_match.values() for player in group]
-    return {
+    report = {
         "schema_version": SCHEMA_VERSION,
         "club": club_name,
         "sources": source_coverage,
@@ -457,3 +457,6 @@ def coverage_report(connection, club_name="Notts County"):
             "Opponent appearances are not included in the selected club's totals.",
         ],
     }
+    from .confirmed_context import apply_coverage_context
+
+    return apply_coverage_context(connection, report, club_name)

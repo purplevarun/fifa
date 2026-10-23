@@ -229,7 +229,12 @@ and `processing/data/processing-report.json` (counts and errors). These are
 auxiliary troubleshooting outputs, not inputs to the next full rebuild and not
 UI data sources. All relationship, uniqueness, type, and range checks run in
 Python. A failed source import rolls back its in-memory changes without losing
-other valid sources. No saved JSON answers override fresh OCR.
+other valid sources. Previous diagnostic JSON is never a substitute for fresh OCR.
+Explicit owner confirmations in `processing/confirmed_context.json` are reapplied
+only to matching image content hashes: season-end cutoffs, captured news purpose,
+assumed observation dates and confirmed own goals. A reused filename with different
+image content does not inherit those confirmations. Conflicting final scores stay
+pending rather than being forced to agree with player totals.
 
 **No flags and no review or approval step are required.** The former `--clean`,
 `--reextract`, `--limit`, and `--screenshots` options are rejected before deletion,
@@ -410,6 +415,22 @@ JSON is versioned. Processing does not make
 another permanent copy of your images or delete the originals automatically.
 
 ## Optional Maintenance
+
+Owner confirmations can be applied to the current diagnostics without resetting
+the archive using `python3 -m processing.confirmed_context --apply`. Back up the
+diagnostics first. This preserves existing entity IDs, records the context changes
+in review history, and republishes the dashboard. These versioned confirmations
+survive a clean rebuild; ad-hoc review changes saved only in diagnostics do not.
+
+For read-only scoreboard retries, use
+`python3 -m processing.recheck_scoreboards --screenshots 111,459,662 --vision --output processing/data/scoreboard-followup.json`.
+`--vision` adds independent Apple Vision readings and requires macOS and Swift;
+omit it for RapidOCR-only checks. The command never imports or resets data. Its
+report, like other generated diagnostics, is deleted by the next full rebuild.
+
+See [the manual follow-up](processing/MANUAL_FOLLOWUP.md) for applied confirmations
+and the resolved screenshot 459 score review. Transfer-interest articles are
+kept as news events, not completed transfers or cumulative-stat snapshots.
 
 Backups, review tools, and developer checks are available directly through
 Python and npm; they are not additional `./run` commands.

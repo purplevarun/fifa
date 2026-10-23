@@ -608,7 +608,7 @@ class NonMatchExtractionTests(unittest.TestCase):
         )
         self.assertIn("news.2.announced_on", fields)
 
-    def test_transfer_rumour_retains_only_explicit_league_assists(self):
+    def test_transfer_rumour_is_news_not_an_assist_snapshot_or_completed_transfer(self):
         for body, expected in (
             (
                 (
@@ -641,11 +641,13 @@ class NonMatchExtractionTests(unittest.TestCase):
                     continue
                 self.assertEqual(len(records), 1)
                 record = records[0]
-                self.assertEqual(record["type"], "player_competition_snapshot")
+                self.assertEqual(record["type"], "competition_event")
+                self.assertEqual(record["event_type"], "transfer_interest")
                 self.assertEqual(record["player"], "Test Player")
                 self.assertEqual(record["club"], "Notts County")
-                self.assertEqual(record["assists"], 12)
-                self.assertEqual(record["competition_kind"], "league")
+                self.assertNotIn("assists", record)
+                self.assertNotIn("transfer_type", record)
+                self.assertIn("Transfer interest only", record["description"])
                 for field in (
                     "competition",
                     "season",

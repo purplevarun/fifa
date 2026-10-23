@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-23",
+  "season_ends": [
+    {
+      "season": "2018/19",
+      "basis": "Owner confirms screenshots 908–929 were captured after the final match of 2018/19; screenshot 907 supplies the league-win context. No exact capture day was supplied.",
+      "sources": [
+        [
+          908,
+          "3b7815e4aa5ece2bac52953c0f8282e7de833deeb166a5d4c0821493d5d63926"
+        ],
+        [
+          909,
+          "b04080c282ea95f80987be9f5519ee7ea82f0a990d92d04497af58c1e9be3baf"
+        ],
+        [
+          910,
+          "d7fd4600b20c9e9a7b03b6e175aabce506b032403cd532f203c9528e2806eb26"
+        ],
+        [
+          911,
+          "e75628b236e44b372d775ea53fd0730d7918e22119f7e0ceac61bd18c46fdbc6"
+        ],
+        [
+          912,
+          "5b08bea3bfe49f148effc0a4858242fcf06518834bfdcc0b26920ce5b04756e4"
+        ],
+        [
+          913,
+          "47ff2d2dea92a78d0753d43ddc923397784835ce184172c9f80b833d549909cc"
+        ],
+        [
+          914,
+          "615b14c81e144fb95d465061635fa0b4ce5a8cb6b7c0a62c75e08248cc840fa6"
+        ],
+        [
+          915,
+          "b3c62358d89e476fe39a0e61acd78c01e2d7f748f1a5a21f0001798f2e5f5ac8"
+        ],
+        [
+          916,
+          "a3eaf7c96e8a60be978a3bf8314567cb404a82b7b01fd209d5910ba893d77a19"
+        ],
+        [
+          917,
+          "013154ed33d0f8ae928a92b1096ce9a7f6c6957801a6a70a5a88f98ef2ef4e57"
+        ],
+        [
+          918,
+          "9dcbcfaab106bf7a82c2e6aa63a19e54233bd9cb69ea2eca678fa6ec9343eaeb"
+        ],
+        [
+          919,
+          "90b1c60b79f13af5ae205ec1ee46b77fed3f889aaaed6c5945a9c470c0a6f5b9"
+        ],
+        [
+          920,
+          "f118e06cc223b3e9866de41323c8d8f869b88dd47d4722222d7541b820118d1b"
+        ],
+        [
+          921,
+          "cb7b866777482295917e1b992b1da9d44bca2d0c0be0bf9f95be3f28bb296cf5"
+        ],
+        [
+          922,
+          "6fc6ea26aa5863a233c5bad89476cd017b2e2e79acb101beeb32cde4566d2dbb"
+        ],
+        [
+          923,
+          "b7525e80a99313cdbb18ea0520c4bc73f27b242cd9b99038b4caf6affdc0af30"
+        ],
+        [
+          924,
+          "c7920cdcb6309b03b55fc1229469d86a837b800acadb132d9f2c19aee69191fd"
+        ],
+        [
+          925,
+          "e4710e8643ee601dbd4d2d2723989966d2ad93c30be674338dc27be661ef7087"
+        ],
+        [
+          926,
+          "5ea495bd0fa1d8461e1e15b13e5f79f5c3c1c470175fb4c41004c95d036d9756"
+        ],
+        [
+          927,
+          "d72e854717d05e4c3c8a619accf13ab2161562019a431a7b2308f6bb9231d3ff"
+        ],
+        [
+          928,
+          "542df5942d8dbe19969ce166d0724e78be3858b46aed8570bf94c21a45d7c3b3"
+        ],
+        [
+          929,
+          "033067c34a8813d7f2113fb5b20f4976c944c30ab094e35a1aa35254b2e6cda7"
+        ]
+      ]
+    },
+    {
+      "season": "2019/20",
+      "basis": "Owner confirms the 1876–1881 end-of-season leaderboard batch. Retain each panel's actual competition: League One, League One Play-Offs or Invitational Cup; do not merge their goals/assists scopes.",
+      "sources": [
+        [
+          1876,
+          "991d0dd160bf4069a39ac4ad2cffc8c44fb9359036afdbbedc54665608148d31"
+        ],
+        [
+          1877,
+          "bc2071f93ed73f456af18fa7987cbe1057a65971d08e1f8f8152017a102c0881"
+        ],
+        [
+          1878,
+          "57a34d4d8964666b0057d3bd41fc6d084f0d99b0f4321e9757b90080781abbe5"
+        ],
+        [
+          1879,
+          "d61109fc2d09905b156d4fa27755efa41c4305f4b539cb5507ad0aaba064ad8f"
+        ],
+        [
+          1880,
+          "5f4dc5717aba1c260716eb47cb04dd09b8c758e007beb85c8282e5a1c6e58b56"
+        ],
+        [
+          1881,
+          "2997aba83055ae5a934faad8c8373485aabb4c23e1b2a76ff0ab7ade6434bf98"
+        ]
+      ]
+    }
+  ],
+  "transfer_interest": {
+    "source": [
+      2494,
+      "db331f29d6876e69c0ce5b47ac86df0f99916d983647264983de08c8768c03ef"
+    ],
+    "observed_on": "2021-02-03",
+    "season": "2020/21",
+    "competition": "EFL Championship",
+    "basis": "Owner-authorised assumed observation date from the following screenshot context, not a date printed on this article. This capture records Racing Club's interest in Kubo, not a cumulative assists observation or a completed transfer."
+  },
+  "opponent_own_goals": [
+    {
+      "source": [
+        1208,
+        "40a466b01ba6dfb1746df4c1453fb32c6b5145914bf934d0e9014308b54a485e"
+      ],
+      "count": 1
+    },
+    {
+      "source": [
+        1972,
+        "caf1f73ba9781be4bcc6db8d632159d119ba40b95b299edcaaf04ec6b324636d"
+      ],
+      "count": 1
+    }
+  ],
+  "match_checks": [
+    {
+      "source": [
+        111,
+        "22baa0477ba029d8c134bee3b80cd0dca72ef7628b7c5b8d3ce197b3ed6106bd"
+      ],
+      "fields": {
+        "home_goals": 1,
+        "away_goals": 1,
+        "home_penalties": 4,
+        "away_penalties": 2
+      },
+      "basis": "Owner confirms 1–1 before Swansea's 4–2 penalty-shootout win."
+    },
+    {
+      "source": [
+        459,
+        "f2e6f3db85f26528dacc60f7653c9e63324603044832341f2d846a23122e4832"
+      ],
+      "fields": {
+        "home_goals": 1,
+        "away_goals": 2,
+        "extra_time": true,
+        "duration_minutes": 120
+      },
+      "basis": "Owner confirms Carlisle United 1–2 Notts County after extra time: a Notts County win. This supersedes the earlier 1–1 note and agrees with both OCR readers and the stored score."
+    },
+    {
+      "source": [
+        662,
+        "2a175070b2fd9ab345d82e289ad9861324e4f131581bf757a57c6c273e1e27cc"
+      ],
+      "fields": {},
+      "basis": "Owner confirms this is a penalty shootout. Numeric scores remain OCR-derived, not manually supplied."
+    }
+  ],
+  "hat_trick_checks": [
+    [1500, "6a191e15da85cf5e2b3204506be27f84b4cb545943009348e4f308fb8e1d1373"],
+    [1559, "2365ee0fb01c7607590d8678323591e2d5cf261e2cb810ae70686b80d96518f1"],
+    [1589, "d1f296618344dfcc7d1d0fdda8bec2d3b7670ccec34d4dc9ab7bdbd355b17736"],
+    [2035, "ce56c30a7d630f0edeeb63ef0d526e179d8eda6de7b1917783c7eeb220834c93"]
+  ],
+  "pending_conflicts": []
+}

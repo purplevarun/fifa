@@ -1,5 +1,9 @@
 # Hat-tricks and homepage statistics review
 
+> Owner follow-up: the four hat-tricks and two opponent own goals are now
+> confirmed. See [MANUAL_FOLLOWUP.md](MANUAL_FOLLOWUP.md) for the fresh scoreboard
+> retries and the resolved 459 score confirmation: Carlisle 1–2 Notts after extra time.
+
 Reviewed 22 October 2026 against the current export: **169 matches and 2,253
 Notts County appearances**. This is an automated evidence review, not exhaustive
 human visual verification or proof that every career fixture was captured.

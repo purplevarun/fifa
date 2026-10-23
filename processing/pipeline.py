@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from . import EXTRACTOR_VERSION, SCHEMA_VERSION
+from .confirmed_context import apply_record_context
 from .catalog import (
     coverage_report,
     fixture_details,
@@ -863,6 +864,11 @@ def import_record(connection, source_id, record, replace_reviewed=False):
             if not record.get("player"):
                 raise ValueError("Player of the Year requires a named winner")
             values["competition_season_id"] = None
+        elif event_type == "transfer_interest" and not (
+            record.get("season") and record.get("competition")
+        ):
+            # Interest is not a completed transfer or a competition award.
+            values["competition_season_id"] = None
         else:
             values["competition_season_id"] = ensure_edition(connection, record)
         values["player_id"] = (
@@ -1318,6 +1324,7 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
             current_match_id = None
         document = documents.get(source["id"])
         if document is not None:
+            document["records"] = apply_record_context(source, document["records"])
             if not document["records"] and screen_type not in {
                 "match_facts",
                 "player_performance",

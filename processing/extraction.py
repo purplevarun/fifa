@@ -1092,16 +1092,11 @@ class ScreenshotExtractor:
             next(iter(matching_dates)) if len(matching_dates) == 1 else None,
         )
         records = [selected] if selected else []
-        assist_leader = re.match(
+        transfer_interest = re.match(
             r"Assist Leader (.+?) Targeted by\b", news_title(title), re.IGNORECASE
         )
-        assist_total = re.search(
-            r"\bcurrently leads the league in assists with (\d+)\b",
-            body,
-            re.IGNORECASE,
-        )
-        if assist_leader and assist_total:
-            player = assist_leader.group(1).strip()
+        if transfer_interest:
+            player = transfer_interest.group(1).strip()
             current_club = re.search(
                 r"\bin demand than (.+?)['\u2019]s\s+" + re.escape(player) + r"\b",
                 body,
@@ -1110,19 +1105,17 @@ class ScreenshotExtractor:
             if current_club:
                 records.append(
                     {
-                        "type": "player_competition_snapshot",
+                        "type": "competition_event",
+                        "event_type": "transfer_interest",
                         "player": player,
                         "club": club_name(current_club.group(1)),
                         "competition": None,
-                        "competition_kind": "league",
-                        "scope": "competition",
                         "season": None,
-                        "observed_on": next(iter(matching_dates))
+                        "announced_on": next(iter(matching_dates))
                         if len(matching_dates) == 1
                         else None,
-                        "snapshot_kind": "in_season",
-                        "assists": int(assist_total.group(1)),
-                        "date_basis": "Selected news article explicitly reports current league assists; transfer speculation is not a completed transfer.",
+                        "period": None,
+                        "description": f"{clean_news_text(news_title(title))}. {clean_news_text(body)} [Transfer interest only; no completed move recorded.]",
                     }
                 )
         for headline, announced_on in stories:
@@ -1142,7 +1135,9 @@ class ScreenshotExtractor:
             if record["event_type"] == "player_of_the_year":
                 if not record["period"]:
                     issues.append("The Player of the Year award year is not stated.")
-            elif not record["competition"] or not record["season"]:
+            elif record["event_type"] != "transfer_interest" and (
+                not record["competition"] or not record["season"]
+            ):
                 issues.append(
                     f"Competition or season is not stated in the award text: {record['description']}"
                 )
@@ -1481,9 +1476,9 @@ class ScreenshotExtractor:
         for side in ("home", "away"):
             record[f"{side}_club"] = club_name(fields[f"{side}_club"]["raw_text"])
             record[f"{side}_goals"] = parse_integer(fields[f"{side}_goals"]["raw_text"])
-        clock = fields["clock"]["raw_text"]
+        clock = re.sub(r"\s+", "", fields["clock"]["raw_text"]).upper()
         shootout = re.search(r"(\d+)\s*[-:]\s*(\d+).*PEN", clock, re.IGNORECASE)
-        minutes = re.search(r"\b(90|120)[:.]00\b", clock)
+        minutes = re.search(r"(?<!\d)(90|120)[:.]00(?!\d)", clock)
         record.update(
             home_penalties=int(shootout.group(1)) if shootout else None,
             away_penalties=int(shootout.group(2)) if shootout else None,
