@@ -30,6 +30,7 @@ NON_MATCH_SCREEN_TYPES = {
     "transfer",
     "news",
     "competition_result",
+    "knockout_bracket",
     "dashboard_award",
     "inbox",
     "player_leaderboard",

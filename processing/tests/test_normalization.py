@@ -9,6 +9,7 @@ from processing.normalization import (
     FIFA19_COUNTRIES,
     FIFA19_SOURCE,
     canonical_club_name,
+    canonical_venue_name,
     normalize_nationality,
     normalize_positions,
     resolve_nationality,
@@ -23,6 +24,20 @@ CLUB_CASES = (
     ("Grimsbytown", "Grimsby Town"),
     ("..Doncaster", "Doncaster"),
     ("Coventrycity", "Coventry City"),
+    ("Cardiffcity", "Cardiff City"),
+    ("Derbycounty", "Derby County"),
+    ("Swanseacity", "Swansea City"),
+    ("Hullcity", "Hull City"),
+    ("Exetercity", "Exeter City"),
+    ("Yeoviltown", "Yeovil Town"),
+    ("Dundeefc", "Dundee FC"),
+    ("Mkdons", "MK Dons"),
+    ("Qpr", "QPR"),
+    ("Orebrosk", "Örebro SK"),
+    ("Lechpoznan", "Lech Poznań"),
+    ("Aj Auxerre", "AJ Auxerre"),
+    ("Sporting Cp", "Sporting CP"),
+    ("FC Kobenhavn", "FC København"),
 )
 
 
@@ -88,6 +103,13 @@ class IdentityParsingTests(unittest.TestCase):
         self.assertEqual(canonical_club_name("Other   Club"), "Other Club")
         self.assertIsNone(club_name("   "))
 
+    def test_venue_variants_canonicalize(self):
+        for raw in ("Ivy Lane", "lvy Lane", "ivy Lane", "livy Lane", "lvy  Lane"):
+            with self.subTest(raw=raw):
+                self.assertEqual(canonical_venue_name(raw), "Ivy Lane")
+        self.assertEqual(canonical_venue_name("KcoM Stadium"), "KCOM Stadium")
+        self.assertEqual(canonical_venue_name("Wembley Stadium"), "Wembley Stadium")
+
     def test_verified_fifa19_fallback_is_exact_and_source_values_win(self):
         for name, country, fifa_id in (
             ("Matty James", "England", 186139),
@@ -135,7 +157,7 @@ class IdentityImportTests(unittest.TestCase):
                     self.connection.get("clubs", first)["name"],
                     canonical,
                 )
-        self.assertEqual(self.connection.count("clubs"), 7)
+        self.assertEqual(self.connection.count("clubs"), 21)
 
     def test_existing_variant_keeps_its_id_and_alias(self):
         existing = insert_entity(self.connection, "clubs", {"name": "Lincolncity"})

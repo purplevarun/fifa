@@ -9,6 +9,7 @@ from . import EXTRACTOR_VERSION
 from .normalization import (
     POSITIONS,
     canonical_club_name,
+    canonical_venue_name,
     normalize_nationality,
     normalize_positions,
     resolve_nationality,
@@ -133,6 +134,12 @@ def classify(text):
         return "player_leaderboard"
     if "congratulations" in normalized and "winner" in normalized:
         return "competition_result"
+    if "winner" in normalized and (
+        "semifinals" in normalized
+        or "quarterfinals" in normalized
+        or ("round1" in normalized and "round2" in normalized)
+    ):
+        return "knockout_bracket"
     if "scoresfixtures" in normalized and (
         "changecompetition" in normalized or "pickcompetition" in normalized
     ):
@@ -286,7 +293,7 @@ def parse_header(text):
         "played_on": played_on,
         "season": season,
         "competition": competition,
-        "venue": venue,
+        "venue": canonical_venue_name(venue) if venue else None,
     }
 
 
@@ -315,7 +322,9 @@ def club_name(text):
     words = text.strip().title().split()
     return (
         " ".join(
-            word.upper() if word.upper() in {"FC", "MK", "AFC"} else word
+            word.upper()
+            if word.upper() in {"FC", "MK", "AFC", "QPR", "SK", "AJ", "CP"}
+            else word
             for word in words
         )
         or None
@@ -844,6 +853,11 @@ class ScreenshotExtractor:
             issues.append(
                 "The winner screen does not show its season or exact announcement date."
             )
+        elif screen_type == "knockout_bracket":
+            records, fields = self.extract_knockout_bracket(tokens)
+            issues.append(
+                "The bracket screen does not show its season or exact announcement date."
+            )
         elif screen_type == "league_table":
             records, fields, table_issues = self.extract_league_table(image, tokens)
             issues.extend(table_issues)
@@ -1317,6 +1331,57 @@ class ScreenshotExtractor:
                 "announced_on": None,
                 "period": None,
                 "description": f"{winner} won {fields['competition']['raw_text']}.",
+            }
+        ], fields
+
+    def extract_knockout_bracket(self, tokens):
+        fields = detected_fields(
+            tokens,
+            {
+                "competition": (105, 60, 420, 135),
+                "winner": (240, 500, 700, 560),
+                "finalist_one": (230, 560, 368, 600),
+                "final_score": (368, 560, 450, 600),
+                "finalist_two": (450, 560, 620, 600),
+            },
+        )
+        competition = parse_header(fields["competition"]["raw_text"])["competition"]
+        winner = club_name(fields["winner"]["raw_text"])
+        if not winner or not competition:
+            return [], fields
+        description = f"{winner} won {competition}."
+        finalists = (
+            club_name(fields["finalist_one"]["raw_text"]),
+            club_name(fields["finalist_two"]["raw_text"]),
+        )
+        score = re.fullmatch(
+            r"\s*(\d+)\s*[-–—:]\s*(\d+)\s*",
+            fields["final_score"]["raw_text"],
+        )
+        runner_up = next(
+            (club for club in finalists if club and club != winner), None
+        )
+        if runner_up and score and winner in finalists:
+            goals = (
+                (score.group(1), score.group(2))
+                if winner == finalists[0]
+                else (score.group(2), score.group(1))
+            )
+            description = (
+                f"{winner} won {competition}, beating {runner_up} "
+                f"{goals[0]}–{goals[1]} in the final."
+            )
+        return [
+            {
+                "type": "competition_event",
+                "event_type": "champion",
+                "player": None,
+                "club": winner,
+                "competition": competition,
+                "season": None,
+                "announced_on": None,
+                "period": None,
+                "description": description,
             }
         ], fields
 

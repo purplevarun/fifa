@@ -198,8 +198,28 @@ CLUB_NAMES = {
         "Grimsby Town",
         "Doncaster",
         "Coventry City",
+        "Cardiff City",
+        "Derby County",
+        "Swansea City",
+        "Hull City",
+        "Exeter City",
+        "Yeovil Town",
+        "Dundee FC",
+        "MK Dons",
+        "QPR",
+        "Örebro SK",
+        "Lech Poznań",
+        "AJ Auxerre",
+        "Sporting CP",
     )
 }
+# The OCR-readable ASCII spelling is the identity key for København's ø.
+CLUB_NAMES[identity_key("FC Kobenhavn")] = "FC København"
+VENUE_NAMES = {
+    identity_key(name): "Ivy Lane"
+    for name in ("Ivy Lane", "lvy Lane", "ivy Lane", "livy Lane")
+}
+VENUE_NAMES[identity_key("KcoM Stadium")] = "KCOM Stadium"
 COUNTRY_NAMES = {identity_key(name): name for name in FIFA19_COUNTRIES}
 COUNTRY_NAMES.update({"scotand": "Scotland"})
 USER_CONFIRMED_NATIONALITIES = {
@@ -233,6 +253,18 @@ def canonical_club_name(value):
         raise ValueError("A non-empty club name is required")
     name = " ".join(value.split())
     return CLUB_NAMES.get(identity_key(name), name)
+
+
+def canonical_venue_name(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("A non-empty venue name is required")
+    name = " ".join(value.split())
+    key = identity_key(name)
+    if key in VENUE_NAMES:
+        return VENUE_NAMES[key]
+    if re.fullmatch(r"[il1]{1,2}vylane", key):
+        return "Ivy Lane"
+    return name
 
 
 def normalize_nationality(value):

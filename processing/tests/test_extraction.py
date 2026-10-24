@@ -77,6 +77,16 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(
             classify("STANDINGS Player of the Month August shortlist"), "dashboard"
         )
+        self.assertEqual(
+            classify(
+                "ROUND 1 ROUND 2 ROUND 3 ROUND 4 QUARTER-FINALS SEMI FINALS "
+                "FINAL WINNER LIVERPOOL LIVERPOOL 2 - 1 NOTTS COUNTY"
+            ),
+            "knockout_bracket",
+        )
+        self.assertEqual(
+            classify("Central News Liverpool wins the fourth round 1-0"), "news"
+        )
 
     def test_money_uses_minor_units_without_guessing_dollar_currency(self):
         self.assertEqual(parse_money("$33,601"), (3360100, None, "$"))
