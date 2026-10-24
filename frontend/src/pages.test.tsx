@@ -294,6 +294,25 @@ describe("local stats pages", () => {
 		},
 	);
 
+	it("shows total growth between first and latest recorded overalls", () => {
+		const html = renderToStaticMarkup(
+			<MemoryRouter initialEntries={["/players"]}>
+				<CareerContext
+					value={{
+						model,
+						filters: defaultFilters,
+						matches: model.matches,
+					}}
+				>
+					<Players />
+				</CareerContext>
+			</MemoryRouter>,
+		);
+		expect(html).toContain("Growth");
+		expect(html).toContain("+8");
+		expect(html).toContain("From 62 to 70");
+	});
+
 	it("merges chart statistics with active filters in player links", () => {
 		const html = renderToStaticMarkup(
 			<MemoryRouter

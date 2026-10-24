@@ -370,6 +370,10 @@ export function playerSummary(
 		assists: metric(rows, "assists"),
 		rating: average(rows, "rating"),
 		overall: last?.overall ?? rows.at(-1)?.overall ?? null,
+		initialOverall:
+			snapshots.find((row) => row.overall !== null)?.overall ??
+			rows.find((row) => row.overall !== null)?.overall ??
+			null,
 		position:
 			last?.displayed_position ?? rows.at(-1)?.displayed_position ?? null,
 		snapshots,

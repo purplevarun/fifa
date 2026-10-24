@@ -808,6 +808,10 @@ export function Players() {
 			);
 			return {
 				...summary,
+				growth:
+					summary.overall === null || summary.initialOverall === null
+						? null
+						: summary.overall - summary.initialOverall,
 				statistic: performanceMetric(
 					summary.rows,
 					statistic === "summary" ? "goals" : statistic,
@@ -862,6 +866,24 @@ export function Players() {
 			render: (player) => (
 				<strong className="number">{display(player.overall)}</strong>
 			),
+		},
+		{
+			key: "growth",
+			title: "Growth",
+			numeric: true,
+			render: (player) =>
+				player.growth === null ? (
+					<span className="muted">-</span>
+				) : (
+					<span
+						className={`number ${player.growth > 0 ? "positive-text" : player.growth < 0 ? "negative-text" : "muted"}`}
+						title={`From ${display(player.initialOverall)} to ${display(player.overall)}`}
+					>
+						{player.growth > 0
+							? `+${player.growth}`
+							: player.growth}
+					</span>
+				),
 		},
 		{ key: "appearances", title: "Apps", numeric: true },
 		{
