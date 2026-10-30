@@ -1416,6 +1416,110 @@ class AutomaticImportTests(RecordTestCase):
         self.assertIsNone(snapshot["observed_on"])
         self.assertEqual(snapshot["appearances"], 12)
 
+    def test_boundary_screens_resolve_via_named_competitions(self):
+        totals = [
+            {
+                "type": "player_competition_snapshot",
+                "player": "Harry Kewell",
+                "club": "Notts County",
+                "season": None,
+                "competition": competition,
+                "scope": "competition",
+                "snapshot_kind": "in_season",
+                "appearances": 0,
+            }
+            for competition in (
+                "European International Cup",
+                "EFL Championship",
+            )
+        ]
+        self.extract(
+            (
+                "match_facts",
+                [
+                    {
+                        **self.match,
+                        "competition": "EFL Championship",
+                        "season": "2020/21",
+                        "played_on": "2021-04-10",
+                    }
+                ],
+            ),
+            (
+                "match_facts",
+                [
+                    {
+                        **self.match,
+                        "season": "2020/21",
+                        "played_on": "2020-07-15",
+                    }
+                ],
+            ),
+            ("squad", totals),
+            (
+                "squad",
+                [
+                    {
+                        "type": "player_snapshot",
+                        "player": "Harry Kewell",
+                        "club": "Notts County",
+                        "season": None,
+                        "overall": 65,
+                        "snapshot_kind": "first_observed",
+                        "date_precision": "unknown",
+                    }
+                ],
+            ),
+            (
+                "league_table",
+                [
+                    {
+                        "type": "competition_event",
+                        "event_type": "league_table_position",
+                        "club": "Notts County",
+                        "competition": "EFL Championship",
+                        "season": None,
+                        "period": "4",
+                        "description": "Notts County finished 4th",
+                    }
+                ],
+            ),
+            (
+                "match_facts",
+                [
+                    {
+                        **self.match,
+                        "season": "2021/22",
+                        "played_on": "2021-07-20",
+                    }
+                ],
+            ),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 6)
+        for snapshot in self.store.rows("player_competition_snapshots"):
+            self.assertEqual(
+                self.store.get("seasons", snapshot["season_id"])["label"], "2020/21"
+            )
+        self.assertEqual(
+            self.store.get("seasons", self.store.find("player_snapshots")["season_id"])[
+                "label"
+            ],
+            "2020/21",
+        )
+        table = self.store.find(
+            "competition_events", event_type="league_table_position"
+        )
+        self.assertEqual(
+            self.store.get("competition_seasons", table["competition_season_id"])[
+                "competition_id"
+            ],
+            self.store.find("competitions", name="EFL Championship")["id"],
+        )
+
     def test_ambiguous_season_boundary_is_not_guessed(self):
         self.extract(
             ("match_facts", [self.match]),
@@ -2295,6 +2399,122 @@ class AutomaticImportTests(RecordTestCase):
             self.store.count("player_matches"),
             0,
         )
+
+    def test_complementary_transfer_panels_merge_into_one_signing(self):
+        contract = {
+            "type": "player_transfer",
+            "player": "Federico Valverde",
+            "transfer_type": "permanent",
+            "to_club": "Notts County",
+            "weekly_wage_minor": 9000000,
+            "contract_months": 60,
+            "date_basis": "01/07 shown in the agreed contract panel; year requires review.",
+        }
+        offer = {
+            "type": "player_transfer",
+            "player": "Federico Valverde",
+            "transfer_type": "permanent",
+            "to_club": "Notts County",
+            "weekly_wage_minor": 9000000,
+            "fee_minor": 1570000000,
+            "date_basis": "01/07 shown in the selected offer row; year requires review.",
+        }
+        self.extract(
+            ("match_facts", [self.match]),
+            ("transfer", [contract]),
+            ("transfer", [offer]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 3)
+        self.assertEqual(self.store.count("player_transfers"), 1)
+        row = self.store.find("player_transfers")
+        self.assertEqual(row["fee_minor"], 1570000000)
+        self.assertEqual(row["weekly_wage_minor"], 9000000)
+        self.assertEqual(row["contract_months"], 60)
+
+    def test_undated_complementary_transfer_panels_merge(self):
+        contract = {
+            "type": "player_transfer",
+            "player": "Federico Valverde",
+            "transfer_type": "permanent",
+            "to_club": "Notts County",
+            "weekly_wage_minor": 9000000,
+            "contract_months": 60,
+            "date_basis": "01/07 shown in the agreed contract panel; year requires review.",
+        }
+        offer = {
+            "type": "player_transfer",
+            "player": "Federico Valverde",
+            "transfer_type": "permanent",
+            "to_club": "Notts County",
+            "weekly_wage_minor": 9000000,
+            "fee_minor": 1570000000,
+            "date_basis": "01/07 shown in the selected offer row; year requires review.",
+        }
+        self.extract(("transfer", [contract]), ("transfer", [offer]))
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(self.store.count("player_transfers"), 1)
+        row = self.store.find("player_transfers")
+        self.assertEqual(row["fee_minor"], 1570000000)
+        self.assertEqual(row["contract_months"], 60)
+
+    def test_conflicting_transfer_panels_stay_separate_rows(self):
+        first = {
+            "type": "player_transfer",
+            "player": "Federico Valverde",
+            "transfer_type": "permanent",
+            "to_club": "Notts County",
+            "weekly_wage_minor": 9000000,
+            "date_basis": "01/07 shown in the agreed contract panel; year requires review.",
+        }
+        second = {
+            **first,
+            "weekly_wage_minor": 12000000,
+            "date_basis": "01/07 shown in the selected offer row; year requires review.",
+        }
+        self.extract(
+            ("match_facts", [self.match]),
+            ("transfer", [first]),
+            ("transfer", [second]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(self.store.count("player_transfers"), 2)
+
+    def test_repeat_monthly_award_captures_merge_but_periods_stay_distinct(self):
+        award = {
+            "type": "competition_event",
+            "event_type": "player_of_the_month",
+            "player": "Harry Kewell",
+            "competition": "European International Cup",
+            "season": "2018/19",
+            "period": "2018-08",
+            "description": "Monthly award",
+        }
+        self.extract(
+            ("news", [award]),
+            ("news", [{**award, "description": "Repeated capture"}]),
+            ("news", [{**award, "period": "2018-09"}]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 3)
+        self.assertEqual(self.store.count("competition_events"), 2)
+        self.assertEqual(
+            self.store.find("competition_events", period="2018-08")["description"],
+            "Monthly award",
+        )
+        self.assertEqual(self.store.count("reviews"), 3)
 
 
 class CommandTests(RecordTestCase):

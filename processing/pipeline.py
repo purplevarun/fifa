@@ -659,10 +659,14 @@ def confirmed_match(connection, record):
 
 
 def repeated_transfer_source(connection, record, values):
-    """Deduplicate only fully agreeing captures with a supported date context."""
-    if not record.get("season") or not re.match(
-        r"\d{1,2}/\d{1,2} shown in", record.get("date_basis", "")
-    ):
+    """Deduplicate fully agreeing or complementary captures of one transfer.
+
+    An accepted contract panel and an accepted transfer-fee panel can show the
+    same signing with different visible terms. A previous transfer row is a
+    duplicate when no field holds two different non-null values, ignoring the
+    per-panel date basis note, and its review recorded the same season (which
+    may itself be unknown at a season boundary)."""
+    if not re.match(r"\d{1,2}/\d{1,2} shown in", record.get("date_basis", "")):
         return None
     existing = connection.rows(
         "player_transfers",
@@ -673,19 +677,21 @@ def repeated_transfer_source(connection, record, values):
     )
     for previous in existing:
         if previous["source_id"] == values["source_id"] or any(
-            previous[field] != value
+            previous[field] is not None
+            and value is not None
+            and previous[field] != value
             for field, value in values.items()
-            if field != "source_id"
+            if field not in {"source_id", "date_basis"}
         ):
             continue
         review = connection.latest_review(previous["source_id"])
         if review and any(
             item.get("type") == "player_transfer"
-            and item.get("season") == record["season"]
+            and item.get("season") == record.get("season")
             and item.get("player") == record.get("player")
             for item in json.loads(review["payload_json"])["records"]
         ):
-            return previous["source_id"]
+            return previous
     return None
 
 
@@ -839,9 +845,11 @@ def import_record(connection, source_id, record, replace_reviewed=False):
             if record.get("to_club")
             else None,
         )
-        repeated_source = repeated_transfer_source(connection, record, values)
-        if repeated_source:
-            values["source_id"] = repeated_source
+        repeated = repeated_transfer_source(connection, record, values)
+        if repeated:
+            values["source_id"] = repeated["source_id"]
+            if values.get("date_basis") != repeated["date_basis"]:
+                del values["date_basis"]
         key = {
             field: values[field]
             for field in ("source_id", "player_id", "transfer_type")
@@ -881,12 +889,24 @@ def import_record(connection, source_id, record, replace_reviewed=False):
         if event_type == "champion" and values["club_id"] is None:
             raise ValueError("A championship requires a named winning club")
         key_fields = ("source_id", "event_type", "player_id", "club_id", "period")
+        award_key = None
         if event_type == "player_of_the_year":
-            key_fields = ("event_type", "period")
+            award_key = ("event_type", "period")
         elif event_type == "champion":
-            key_fields = ("event_type", "competition_season_id")
+            award_key = ("event_type", "competition_season_id")
+        elif event_type in {
+            "player_of_the_month",
+            "player_of_the_competition",
+            "goalkeeper_of_the_competition",
+            "golden_boot",
+        }:
+            award_key = ("event_type", "player_id", "period", "competition_season_id")
+        elif event_type == "promotion":
+            award_key = ("event_type", "club_id", "period", "competition_season_id")
+        if award_key:
+            key_fields = award_key
         key = {field: values.get(field) for field in key_fields}
-        if event_type in {"player_of_the_year", "champion"}:
+        if award_key:
             existing = connection.find("competition_events", **key)
             if existing and existing["source_id"] != source_id:
                 values["source_id"] = existing["source_id"]
@@ -1260,8 +1280,14 @@ def source_season_contexts(connection, sources):
         competitions = {
             record.get("competition")
             for record in candidates.get(source["id"], [])
-            if record.get("type") == "player_competition_snapshot"
-            and record.get("scope") == "competition"
+            if record.get("competition")
+            and (
+                (
+                    record.get("type") == "player_competition_snapshot"
+                    and record.get("scope") == "competition"
+                )
+                or record.get("type") == "competition_event"
+            )
         }
         if competitions and all(name in competition_seasons for name in competitions):
             seasons = set.intersection(

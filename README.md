@@ -291,18 +291,27 @@ Supported screens include:
 - Visible Notts County goals/assists leaderboard rows, including appearances,
   kept as separate cumulative observations rather than extra match records.
 - Completed transfers and loans, weekly wages, contract lengths and loan lengths.
-- Dated outbound-loan confirmation emails that explicitly state an immediate move.
+- Accepted Transfer Hub fee offers, which record the agreed fee; the wage row on
+  that panel is the player's weekly wage, not a fee.
+- Dated outbound-loan confirmation emails that explicitly state an immediate move,
+  and dated emails confirming a loan spell expired and the player returned.
+- League tables and squad-hub season totals across every competition shown.
 - Player of the Month, Player of the Year, player/goalkeeper competition awards, Golden Boot headlines and competition winners, including championship dashboard banners.
 
-EFL Championship and UEFA Champions/Europa League competition names are supported.
+Premier League, EFL Championship including the Champ. Play-Offs, and UEFA
+Champions/Europa League competition names are supported.
 Trophy articles with “Win the …” or “… winners” headlines are recognized, as are
-confirmed promotion articles. A pre-contract for a future transfer window is not
-treated as a completed move.
+confirmed promotion articles with “… Promoted to the …” titles and review
+articles whose text names the promoted finalist. A pre-contract for a future
+transfer window is not treated as a completed move.
 
 Offers still in negotiation and award shortlists are not treated as completed
 signings or wins. Missing years, selling clubs, fees and competition context stay
 unknown unless related screenshot evidence resolves them unambiguously. Contract
-offers are not mistaken for transfer fees. News surnames are resolved again at
+offers are not mistaken for transfer fees, and a transfer-fee panel's player
+value is not mistaken for a wage. When the managed club cannot be read on an
+inbox screen, the inbox badge widget supplies it rather than a guessed name.
+News surnames are resolved again at
 import time, after earlier player records are available; ambiguous names are rejected.
 
 Undated profiles and season totals use compatible neighboring dated fixtures or
@@ -321,9 +330,12 @@ from the news text, never a portrait, training panel, standings, or fixture.
 Dashboard calendars do not supply an exact announcement date. Missing award
 years and conflicting winners remain unresolved rather than being guessed.
 
-Multiple captures of the same annual award or competition-season championship
-share one event. Each screenshot keeps its own OCR and review evidence; repeat
-captures do not inflate honour counts. The published schema remains version 4,
+Multiple captures of the same annual award, monthly or competition award,
+Golden Boot, promotion or competition-season championship share one event.
+Each screenshot keeps its own OCR and review evidence; repeat
+captures do not inflate honour counts. A contract panel and a transfer-fee
+panel describing the same signing merge into one transfer row only when no
+field disagrees. The published schema remains version 4,
 including competition-independent annual awards; the dashboard also accepts
 older schema-3 exports. Historical database migrations are no longer supported:
 rebuild from the original screenshots instead.

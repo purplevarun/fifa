@@ -107,6 +107,76 @@ class ParsingTests(unittest.TestCase):
         for text in ("", "0 Years", "Unknown", "$12"):
             self.assertIsNone(parse_months(text))
 
+    def test_premier_league_and_championship_playoffs_headers(self):
+        header = parse_header("07 August 2021 | Ivy Lane | Premier League")
+        self.assertEqual(header["competition"], "Premier League")
+        self.assertEqual(header["season"], "2021/22")
+        for label in (
+            "Champ. Play-Offs",
+            "Champ. Play-ffs",
+            "EFL Championship Play-Offs",
+        ):
+            with self.subTest(label=label):
+                header = parse_header(f"07 June 2021 | Wembley Stadium | {label}")
+                self.assertEqual(header["competition"], "EFL Championship Play-Offs")
+        self.assertEqual(
+            parse_header("21 April 2021 | Ivy Lane | EFL Championship")["competition"],
+            "EFL Championship",
+        )
+
+    def test_marksman_golden_boot_and_promotion_titles(self):
+        boot = parse_news_event(
+            "Golden Boot for Marksman Kubo",
+            "Kubo will be the man lifting the Golden Boot as a reward for his "
+            "22 goals in the EFL Championship.",
+            announced_on="2021-05-10",
+        )
+        self.assertEqual(boot["event_type"], "golden_boot")
+        self.assertEqual(boot["player"], "Kubo")
+        self.assertEqual(boot["competition"], "EFL Championship")
+        promotion = parse_news_event(
+            "Notts County Promoted to the Premier League",
+            "Notts County have been promoted to the Premier League.",
+            announced_on="2021-06-07",
+        )
+        self.assertEqual(promotion["event_type"], "promotion")
+        self.assertEqual(promotion["club"], "Notts County")
+        self.assertEqual(promotion["competition"], "Premier League")
+        self.assertEqual(promotion["season"], "2020/21")
+        self.assertIsNone(
+            parse_news_event(
+                "Notts County Promoted to the Premier League",
+                announced_on="2021-06-07",
+                sidebar=True,
+            )
+        )
+
+    def test_playoff_review_records_the_named_winner(self):
+        review = parse_news_event(
+            "Champ. Play-Offs Review: Notts County vs Preston",
+            "Few expected this outcome, but it's Notts County who were promoted "
+            "and will take their place in a higher division next season.",
+            announced_on="2021-06-07",
+        )
+        self.assertEqual(review["event_type"], "champion")
+        self.assertEqual(review["club"], "Notts County")
+        self.assertEqual(review["competition"], "EFL Championship Play-Offs")
+        self.assertEqual(review["season"], "2020/21")
+        self.assertIsNone(
+            parse_news_event(
+                "Champ. Play-Offs Review: Notts County vs Leeds United",
+                "Notts County progressed after a tight two-legged tie.",
+                announced_on="2021-05-24",
+            )
+        )
+        self.assertIsNone(
+            parse_news_event(
+                "Champ. Play-Offs Review: Preston vs Notts County",
+                "Few expected this outcome after a tense afternoon at Wembley.",
+                announced_on="2021-06-07",
+            )
+        )
+
     def test_monthly_award_uses_award_month_for_year_and_season(self):
         december = parse_news_event(
             "King grabs December Player of the Month Award", announced_on="2019-01-05"
@@ -535,6 +605,118 @@ class NonMatchExtractionTests(unittest.TestCase):
                 self.assertIsNone(records[0]["effective_on"])
                 self.assertEqual(fields["completion"]["raw_text"], completion)
 
+    def transfer_offer_tokens(self, status="Accepted", offer_type="Transfer"):
+        return ocr_tokens(
+            [
+                ("TRANSFER OFFERS", 688, 202, 803, 219),
+                ("Test", 703, 233, 761, 254),
+                ("Player", 702, 256, 862, 286),
+                ("Notts County", 735, 291, 808, 308),
+                ("CM/LM/CAM I Age: 22 I Uruguay", 732, 306, 958, 327),
+                ("Value", 697, 339, 730, 357),
+                ("$18,500,000", 696, 356, 765, 376),
+                ("Weekly Wage", 816, 337, 892, 359),
+                ("$90,000", 816, 356, 864, 377),
+                ("Release clause", 934, 340, 1014, 357),
+                ("None", 932, 357, 966, 378),
+                (
+                    "We have agreed terms with Test Player and he just joined the team.",
+                    688,
+                    392,
+                    1017,
+                    409,
+                ),
+                ("From", 690, 470, 720, 485),
+                ("Offer", 734, 468, 763, 487),
+                ("Neg. Status", 836, 469, 893, 487),
+                ("Offer type", 957, 466, 1008, 488),
+                ("$15,700,000", 740, 522, 817, 545),
+                (status, 869, 527, 918, 544),
+                (offer_type, 966, 527, 1010, 544),
+                ("T. Player", 332, 385, 410, 405),
+                ("01/07", 596, 385, 641, 405),
+            ]
+        )
+
+    def test_transfer_offer_panel_reads_the_accepted_fee(self):
+        records, _fields, issues = self.extractor.extract_transfer(
+            self.transfer_offer_tokens()
+        )
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["player"], "Test Player")
+        self.assertEqual(record["transfer_type"], "permanent")
+        self.assertEqual(record["fee_minor"], 1570000000)
+        self.assertEqual(record["weekly_wage_minor"], 9000000)
+        self.assertEqual(record["nationality"], "Uruguay")
+        self.assertIsNone(record["contract_months"])
+        self.assertIsNone(record["loan_months"])
+        self.assertIn("01/07", record["date_basis"])
+        self.assertIn("transfer fee", issues[-1])
+        for status in ("Rejected", "Pending"):
+            records, _fields, _issues = self.extractor.extract_transfer(
+                self.transfer_offer_tokens(status)
+            )
+            self.assertEqual(records, [])
+
+    def test_inbox_loan_return_emails(self):
+        returned = (
+            "Bos, The loan deal for Test Player from Ajax has expired and "
+            "he has returned back to us ready for use in our squad."
+        )
+        expired = (
+            "Bos, Test Player's loan deal has expired and he has been sent "
+            "back to Everton. If you think he was a good fit, look again."
+        )
+        for subject, body, from_club, to_club in (
+            ("[info] Player Returning from Loan", returned, "Ajax", "Notts County"),
+            ("[info] Player Loan has Expired", expired, "Notts County", "Everton"),
+        ):
+            with self.subTest(subject=subject):
+                tokens = ocr_tokens(
+                    [
+                        ("Notts County", 151, 89, 262, 106),
+                        ("30/06/2021", 802, 218, 908, 235),
+                        ("Assistant Manager", 802, 241, 949, 259),
+                        (subject, 802, 294, 1093, 315),
+                        (body, 705, 391, 1259, 432),
+                    ]
+                )
+                records, _fields, _issues = self.extractor.extract_inbox(tokens)
+                self.assertEqual(len(records), 1)
+                record = records[0]
+                self.assertEqual(record["type"], "player_transfer")
+                self.assertEqual(record["player"], "Test Player")
+                self.assertEqual(record["transfer_type"], "loan_return")
+                self.assertEqual(record["from_club"], from_club)
+                self.assertEqual(record["to_club"], to_club)
+                self.assertEqual(record["effective_on"], "2021-06-30")
+
+    def test_inbox_badge_widget_falls_back_to_the_managed_club(self):
+        body = (
+            "Mr. Kedia, Abdoulaye Dabo has accepted a Two-year loan "
+            "move to Angers SCO. Abdoulaye Dabo will move to Angers "
+            "SCO immediately and will return as soon as his Two-year "
+            "loan expires."
+        )
+        tokens = ocr_tokens(
+            [
+                ("MANAGER RATING UPDATE 88", 151, 70, 500, 90),
+                ("OBJECTIVES OVERVIEW", 151, 92, 262, 106),
+                ("02/08/2021", 802, 218, 908, 235),
+                ("Chief Executive", 802, 241, 949, 259),
+                ("[Info] Dabo Loaned Out", 802, 294, 1093, 315),
+                (body, 705, 391, 1259, 432),
+            ]
+        )
+        records, _fields, _issues = self.extractor.extract_inbox(tokens)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["from_club"], "Notts County")
+        self.assertEqual(record["to_club"], "Angers SCO")
+        self.assertEqual(record["loan_months"], 24)
+        self.assertIn("badge", record["context_basis"])
+
     def news_tokens(
         self,
         headline="King grabs August Player of the Month Award",
@@ -945,7 +1127,7 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_season_totals_remain_separate_from_match_stats(self):
         with Image.open(self.root / "raw_screenshots/909.png") as image:
-            records, evidence = self.extractor.extract_squad_totals(
+            records, evidence, _issues = self.extractor.extract_squad_totals(
                 image.convert("RGB")
             )
         total = next(

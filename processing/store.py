@@ -20,6 +20,8 @@ COMPETITIONS = (
     ("EFL League Two", "league", False),
     ("EFL League One", "league", False),
     ("EFL Championship", "league", False),
+    ("Premier League", "league", False),
+    ("EFL Championship Play-Offs", "cup", False),
     ("UEFA Champions League", "cup", False),
     ("UEFA Europa League", "cup", False),
     ("EFL League Two Play-Offs", "cup", False),

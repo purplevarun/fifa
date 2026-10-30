@@ -211,6 +211,10 @@ CLUB_NAMES = {
         "Lech Poznań",
         "AJ Auxerre",
         "Sporting CP",
+        "RSC Anderlecht",
+        "R. Valladolid CF",
+        "Angers SCO",
+        "Boavista FC",
     )
 }
 # The OCR-readable ASCII spelling is the identity key for København's ø.

@@ -24,6 +24,10 @@ COMPETITION_LABELS = {
     "invitationalcup": "Invitational Cup",
     "eflleaguetwo": "EFL League Two",
     "eflleagueone": "EFL League One",
+    "premierleague": "Premier League",
+    "champplayoffs": "EFL Championship Play-Offs",
+    "champplayffs": "EFL Championship Play-Offs",
+    "championshipplayoffs": "EFL Championship Play-Offs",
     "eflchampionship": "EFL Championship",
     "uefachampionsleague": "UEFA Champions League",
     "uefaeuropaleague": "UEFA Europa League",
@@ -323,7 +327,8 @@ def club_name(text):
     return (
         " ".join(
             word.upper()
-            if word.upper() in {"FC", "MK", "AFC", "QPR", "SK", "AJ", "CP"}
+            if word.upper()
+            in {"FC", "MK", "AFC", "QPR", "SK", "AJ", "CP", "RSC", "CF", "SCO"}
             else word
             for word in words
         )
@@ -424,8 +429,21 @@ def parse_news_event(
         re.IGNORECASE,
     )
     promotion = re.fullmatch(r"(.+?)\s+Secure\s+Promotion[.!]?", title, re.IGNORECASE)
+    promoted_to = re.fullmatch(
+        r"(.+?)\s+Promoted\s+to\s+(?:the\s+)?(.+?)[.!]?", title, re.IGNORECASE
+    )
     golden_boot = re.fullmatch(
         r"(.+?)\s*Wins\s*Golden\s*Boot[.!]?", title, re.IGNORECASE
+    )
+    golden_boot_for = re.fullmatch(
+        r"Golden\s*Boot\s+for\s+(?:Marksman|Sharpshooter|Top\s*Scorer)\s+(.+?)[.!]?",
+        title,
+        re.IGNORECASE,
+    )
+    review = re.fullmatch(
+        r"(.+?)\s+Review\s*:\s*(.+?)\s+(?:vs\.?|v\.?)\s+(.+?)[.!]?",
+        title,
+        re.IGNORECASE,
     )
     award = re.fullmatch(
         r"(player|goalkeeper)ofthe(competition|tournament)(?:announced)?", normalized
@@ -491,13 +509,17 @@ def parse_news_event(
         competition = (
             parse_header(destination.group(1))["competition"] if destination else None
         )
-    elif golden_boot:
+    elif promoted_to and re.search(r"promot", body, re.IGNORECASE):
+        event_type = "promotion"
+        club = club_name(promoted_to.group(1))
+        competition = parse_header(promoted_to.group(2))["competition"]
+    elif golden_boot or golden_boot_for:
         # A neighboring headline is not evidence that its winner belongs in the
         # managed squad. Keep selected articles and global annual awards intact.
         if sidebar:
             return None
         event_type = "golden_boot"
-        player = golden_boot.group(1).strip()
+        player = (golden_boot or golden_boot_for).group(1).strip()
     elif award:
         event_type = f"{award.group(1)}_of_the_competition"
         ownership = re.match(
@@ -522,6 +544,29 @@ def parse_news_event(
                 return None
             club = club_name(announced.group(1))
             player = announced.group(2).strip()
+    elif review:
+        competition = parse_header(review.group(1))["competition"]
+        finalists = {
+            club_name(review.group(2)) or "",
+            club_name(review.group(3)) or "",
+        } - {""}
+        winner = next(
+            (
+                name
+                for name in finalists
+                if re.search(
+                    rf"\b{re.escape(name)}\s+who\s+"
+                    r"(?:were|was|have\s+been)\s+promoted\b",
+                    body,
+                    re.IGNORECASE,
+                )
+            ),
+            None,
+        )
+        if not winner or not competition:
+            return None
+        event_type = "champion"
+        club = winner
     else:
         return None
     season_year = event_date.year - (event_date.month < 7) if event_date else None
@@ -823,11 +868,12 @@ class ScreenshotExtractor:
             if "totals" in squad_text and any(
                 alias in squad_text for alias in COMPETITION_LABELS
             ):
-                additional_records, totals_fields = self.extract_squad_totals(
-                    image, record
+                additional_records, totals_fields, totals_issues = (
+                    self.extract_squad_totals(image, record)
                 )
                 records.extend(additional_records)
                 fields.update(totals_fields)
+                issues.extend(totals_issues)
                 issues.append(
                     "Cumulative totals are separate observations, not extra match statistics."
                 )
@@ -953,8 +999,9 @@ class ScreenshotExtractor:
         transfer_type = {"transfer": "permanent", "loan": "loan"}.get(
             compact(text["transfer_type"])
         )
+        panel = compact(text["panel_heading"])
         if (
-            compact(text["panel_heading"]) != "contractoffers"
+            panel not in {"contractoffers", "transferoffers"}
             or compact(text["status"]) != "accepted"
             or not transfer_type
             or not text["player"]
@@ -967,6 +1014,19 @@ class ScreenshotExtractor:
                     "No accepted signing or agreed pre-contract in the selected contract panel."
                 ],
             )
+        if panel == "transferoffers":
+            # Transfer-offer panels show player value, wage and release clause
+            # where contract panels show wage, contract length and squad role.
+            fields.update(
+                detected_fields(
+                    tokens,
+                    {
+                        "weekly_wage_minor": (808, 352, 898, 382),
+                        "transfer_fee_minor": (720, 505, 830, 560),
+                    },
+                )
+            )
+            text = {field: reading["raw_text"] for field, reading in fields.items()}
         date_text = ""
         surname = compact(text["player"].split()[-1])
         selected_rows = [
@@ -993,6 +1053,11 @@ class ScreenshotExtractor:
             )
             date_text = fields["effective_on"]["raw_text"]
         wage, currency, symbol = parse_money(text["weekly_wage_minor"])
+        fee = None
+        if panel == "transferoffers" and transfer_type == "permanent":
+            fee, fee_currency, fee_symbol = parse_money(text["transfer_fee_minor"])
+            currency = currency or fee_currency
+            symbol = symbol or fee_symbol
         record = {
             "type": "player_transfer",
             "player": text["player"],
@@ -1001,7 +1066,7 @@ class ScreenshotExtractor:
             "transfer_type": transfer_type,
             "effective_on": None,
             "date_basis": f"{date_text or 'No exact date'} shown in the selected transfer row; year requires review.",
-            "fee_minor": None,
+            "fee_minor": fee,
             "weekly_wage_minor": wage,
             "currency": currency,
             "currency_display": symbol,
@@ -1053,7 +1118,9 @@ class ScreenshotExtractor:
                     "context_basis",
                     "Confirm the transfer date/year and selling club; neither is inferred from a badge or filename.",
                 ),
-                "The contract offer is not a transfer fee. A dollar symbol alone does not identify its currency.",
+                "The Offer amount is the accepted transfer fee paid by the managed club."
+                if fee is not None
+                else "The contract offer is not a transfer fee. A dollar symbol alone does not identify its currency.",
             ],
         )
 
@@ -1175,9 +1242,23 @@ class ScreenshotExtractor:
         body = fields["body"]["raw_text"]
         effective_on = parse_news_date(fields["effective_on"]["raw_text"])
         sender = fields["sender"]["raw_text"].strip()
-        club = club_name(fields["club"]["raw_text"])
+        subject = compact(fields["subject"]["raw_text"])
+        badge = fields["club"]["raw_text"].strip()
+        club = (
+            club_name(badge)
+            if badge
+            and not re.search(
+                r"objectives|overview|rating|update", badge, re.IGNORECASE
+            )
+            else "Notts County"
+        )
+        club_basis = (
+            "Managed club inferred as Notts County; the on-screen badge area did not show a club name."
+            if club == "Notts County" and "nottscounty" not in compact(badge)
+            else None
+        )
         if (
-            "contractaccepted" in compact(fields["subject"]["raw_text"])
+            "contractaccepted" in subject
             and re.search(
                 r"\baccept your contract offer with the senior team\b",
                 body,
@@ -1187,20 +1268,17 @@ class ScreenshotExtractor:
             and len(sender.split()) >= 2
             and club
         ):
-            return (
-                [
-                    {
-                        "type": "player_transfer",
-                        "player": sender,
-                        "to_club": club,
-                        "transfer_type": "permanent",
-                        "effective_on": effective_on,
-                        "date_basis": "Dated player email confirms acceptance of a senior-team contract; financial terms and former club are not shown.",
-                    }
-                ],
-                fields,
-                [],
-            )
+            record = {
+                "type": "player_transfer",
+                "player": sender,
+                "to_club": club,
+                "transfer_type": "permanent",
+                "effective_on": effective_on,
+                "date_basis": "Dated player email confirms acceptance of a senior-team contract; financial terms and former club are not shown.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
         loan = re.search(
             r"(?:Mr\.\s*[^,]+,?\s*)?(.+?)\s+has\s+accepted\s+a\s+"
             r"(One|Two|\d+)[- ]year\s+loan\s+move\s+to\s+(.+?)\.",
@@ -1208,35 +1286,70 @@ class ScreenshotExtractor:
             re.IGNORECASE,
         )
         if (
-            not loan
-            or "loanedout" not in compact(fields["subject"]["raw_text"])
-            or not effective_on
-            or "immediately" not in body.casefold()
+            loan
+            and "loanedout" in subject
+            and effective_on
+            and "immediately" in body.casefold()
         ):
-            return (
-                [],
-                fields,
-                [
-                    "No dated senior-contract acceptance or completed loan confirmed in the selected email."
-                ],
-            )
-        years = {"one": 1, "two": 2}.get(loan.group(2).casefold())
-        years = years or parse_integer(loan.group(2))
+            years = {"one": 1, "two": 2}.get(loan.group(2).casefold())
+            years = years or parse_integer(loan.group(2))
+            record = {
+                "type": "player_transfer",
+                "player": loan.group(1).strip(),
+                "from_club": club,
+                "to_club": club_name(loan.group(3)),
+                "transfer_type": "loan",
+                "effective_on": effective_on,
+                "loan_months": years * 12,
+                "date_basis": "Dated loan-confirmation email states that the player moves immediately.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
+        returned = re.search(
+            r"loan\s+deal\s+for\s+(.+?)\s+from\s+(.+?)\s+has\s+expired\s+and\s+"
+            r"(?:he|they|she)\s+has\s+returned\s+(?:back\s+)?to\s+us\b",
+            body,
+            re.IGNORECASE,
+        )
+        if returned and "returningfromloan" in subject and effective_on:
+            record = {
+                "type": "player_transfer",
+                "player": returned.group(1).strip(),
+                "from_club": club_name(returned.group(2)),
+                "to_club": club,
+                "transfer_type": "loan_return",
+                "effective_on": effective_on,
+                "date_basis": "Dated email confirms the player's loan expired and he returned to the managed club.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
+        expired = re.search(
+            r"(.+?)['\u2019]s\s+loan\s+deal\s+has\s+expired\s+and\s+"
+            r"(?:he|they|she)\s+has\s+been\s+sent\s+back\s+to\s+(.+?)[.!]",
+            body,
+            re.IGNORECASE,
+        )
+        if expired and "loanhasexpired" in subject and effective_on:
+            record = {
+                "type": "player_transfer",
+                "player": expired.group(1).split(",")[-1].strip(),
+                "from_club": club,
+                "to_club": club_name(expired.group(2)),
+                "transfer_type": "loan_return",
+                "effective_on": effective_on,
+                "date_basis": "Dated email confirms the player's loan spell at the managed club expired; he returned to his parent club.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
         return (
-            [
-                {
-                    "type": "player_transfer",
-                    "player": loan.group(1).strip(),
-                    "from_club": club_name(fields["club"]["raw_text"]),
-                    "to_club": club_name(loan.group(3)),
-                    "transfer_type": "loan",
-                    "effective_on": effective_on,
-                    "loan_months": years * 12,
-                    "date_basis": "Dated loan-confirmation email states that the player moves immediately.",
-                }
-            ],
-            fields,
             [],
+            fields,
+            [
+                "No dated senior-contract acceptance, completed loan or loan return confirmed in the selected email."
+            ],
         )
 
     def extract_leaderboard(self, image, tokens):
@@ -1704,6 +1817,7 @@ class ScreenshotExtractor:
         }
         evidence = self.recognize(image, regions, integer_fields, verify_numeric=True)
         records = []
+        issues = []
         for row_index in range(6):
             prefix = f"season_totals.{row_index}"
             label = compact(evidence[f"{prefix}.competition"]["raw_text"]).replace(
@@ -1716,6 +1830,12 @@ class ScreenshotExtractor:
                 (name for alias, name in COMPETITION_LABELS.items() if alias in label),
                 None,
             )
+            if not total and competition is None:
+                issues.append(
+                    "Season totals row label is not a recognized competition: "
+                    f"{evidence[f'{prefix}.competition']['raw_text']!r}; its row was not imported."
+                )
+                continue
             record = {
                 "type": "player_competition_snapshot",
                 "player": profile["player"],
@@ -1734,4 +1854,4 @@ class ScreenshotExtractor:
                     parse_number if field == "average_rating" else parse_integer
                 )(raw_text)
             records.append(record)
-        return records, evidence
+        return records, evidence, issues
