@@ -23,6 +23,14 @@ if [ "$#" -gt 0 ]; then
   shift
 fi
 
+if [ -z "${PYTHON:-}" ]; then
+  if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+    PYTHON="$ROOT_DIR/.venv/bin/python"
+  else
+    PYTHON="python3"
+  fi
+fi
+
 case "$command_name" in
   start)
     exec npm --prefix "$FRONTEND_DIR" run dev -- --port 5000 --strictPort "$@"
@@ -32,15 +40,15 @@ case "$command_name" in
       printf '%s\n' 'The process command accepts no arguments. Use ./run process.' >&2
       exit 2
     fi
-    exec python3 -m processing process
+    exec "$PYTHON" -m processing process
     ;;
   format)
     if [ "$#" -ne 0 ]; then
       printf '%s\n' 'The format command accepts no arguments. Use ./run format.' >&2
       exit 2
     fi
-    if ! python3 -m ruff --version >/dev/null 2>&1; then
-      printf '%s\n' 'Ruff is missing. Run python3 -m pip install -r processing/requirements.txt first.' >&2
+    if ! "$PYTHON" -m ruff --version >/dev/null 2>&1; then
+      printf '%s\n' "Ruff is missing. Run $PYTHON -m pip install -r processing/requirements.txt first." >&2
       exit 1
     fi
     if [ ! -f "$FRONTEND_DIR/node_modules/prettier/package.json" ]; then
@@ -48,7 +56,7 @@ case "$command_name" in
       exit 1
     fi
     npm --prefix "$FRONTEND_DIR" run format
-    exec python3 -m ruff format --extend-exclude processing/data processing
+    exec "$PYTHON" -m ruff format --extend-exclude processing/data processing
     ;;
   ''|-h|--help|help)
     usage

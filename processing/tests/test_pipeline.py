@@ -2690,6 +2690,7 @@ class CommandTests(RecordTestCase):
         environment = {
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "PYTHON": "python3",
         }
         return subprocess.run(
             [str(repository / "run"), *arguments],

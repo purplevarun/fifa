@@ -1479,9 +1479,7 @@ class ScreenshotExtractor:
             r"\s*(\d+)\s*[-–—:]\s*(\d+)\s*",
             fields["final_score"]["raw_text"],
         )
-        runner_up = next(
-            (club for club in finalists if club and club != winner), None
-        )
+        runner_up = next((club for club in finalists if club and club != winner), None)
         if runner_up and score and winner in finalists:
             goals = (
                 (score.group(1), score.group(2))

@@ -897,7 +897,8 @@ export function Players() {
 							.map((entry) => entry.number)
 							.filter(
 								(number, index, numbers) =>
-									index === 0 || number !== numbers[index - 1],
+									index === 0 ||
+									number !== numbers[index - 1],
 							)
 							.join(" → ")}
 					</span>
