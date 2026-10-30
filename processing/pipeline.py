@@ -20,6 +20,7 @@ from .identifiers import is_uuid, normalize_references
 from .normalization import (
     CLUB_NAMES,
     canonical_club_name,
+    identity_key,
     normalize_nationality,
     resolve_nationality,
 )
@@ -39,6 +40,7 @@ RECORD_TABLES = {
     "match": "matches",
     "player_match": "player_matches",
     "player_snapshot": "player_snapshots",
+    "player_jersey": "player_jerseys",
     "player_competition_snapshot": "player_competition_snapshots",
     "player_transfer": "player_transfers",
     "competition_event": "competition_events",
@@ -269,8 +271,62 @@ def extract_pending(
     return counts
 
 
-def resolve_candidate_players(connection, extraction, strict=False):
+def candidate_player_matches(connection, name):
+    normalized = normalized_name(name).casefold()
     players = connection.rows("players")
+    alias = connection.get("player_aliases", normalized)
+    exact = [
+        player
+        for player in players
+        if player["name"].casefold() == normalized
+        or (alias and player["id"] == alias["player_id"])
+    ]
+    if exact:
+        return exact, True
+    abbreviated = re.fullmatch(r"([a-z])\.\s*(.+)", normalized)
+    if abbreviated:
+        initial, surname = abbreviated.groups()
+        folded = identity_key(surname)
+        matches = [
+            player
+            for player in players
+            if identity_key(player["name"]).startswith(initial)
+            and identity_key(player["name"]).endswith(folded)
+        ]
+        if matches:
+            return matches, False
+    return (
+        [
+            player
+            for player in players
+            if player["name"].casefold().endswith(f" {normalized}")
+        ],
+        False,
+    )
+
+
+def jersey_candidate_name(name, candidates):
+    normalized = normalized_name(name).casefold()
+    abbreviated = re.fullmatch(r"([a-z])\.\s*(.+)", normalized)
+    if abbreviated:
+        initial, surname = abbreviated.groups()
+        folded = identity_key(surname)
+        hits = [
+            candidate
+            for candidate in candidates
+            if identity_key(candidate).startswith(initial)
+            and identity_key(candidate).endswith(folded)
+        ]
+    else:
+        hits = [
+            candidate
+            for candidate in candidates
+            if candidate.casefold().endswith(f" {normalized}")
+        ]
+    return hits[0] if len(hits) == 1 else None
+
+
+def resolve_candidate_players(connection, extraction, strict=False):
     for record in extraction["records"]:
         name = record.get("player")
         if (
@@ -279,24 +335,13 @@ def resolve_candidate_players(connection, extraction, strict=False):
                 "player_transfer",
                 "competition_event",
                 "player_competition_snapshot",
+                "player_jersey",
             }
             or not name
             or record.get("player_id")
         ):
             continue
-        normalized = normalized_name(name).casefold()
-        alias = connection.get("player_aliases", normalized)
-        exact = [
-            player
-            for player in players
-            if player["name"].casefold() == normalized
-            or (alias and player["id"] == alias["player_id"])
-        ]
-        matching = exact or [
-            player
-            for player in players
-            if player["name"].casefold().endswith(f" {normalized}")
-        ]
+        matching, exact = candidate_player_matches(connection, name)
         if len(matching) == 1:
             record["player_id"] = matching[0]["id"]
             record["player"] = matching[0]["name"]
@@ -305,7 +350,7 @@ def resolve_candidate_players(connection, extraction, strict=False):
                     f"OCR name {name!r} matched unambiguously to recorded player {record['player']!r}."
                 )
         elif len(matching) > 1:
-            if strict:
+            if strict and record.get("type") != "player_jersey":
                 raise ValueError(
                     f"Ambiguous player name {name!r}: matches multiple recorded players"
                 )
@@ -800,6 +845,7 @@ def import_record(connection, source_id, record, replace_reviewed=False):
         "player_snapshot",
         "player_competition_snapshot",
         "player_transfer",
+        "player_jersey",
     }:
         values["player_id"] = ensure_player(connection, record)
     if record_type in {"player_snapshot", "player_competition_snapshot"}:
@@ -854,6 +900,15 @@ def import_record(connection, source_id, record, replace_reviewed=False):
             field: values[field]
             for field in ("source_id", "player_id", "transfer_type")
         }
+    elif record_type == "player_jersey":
+        values["season_id"] = ensure_season(connection, record.get("season"))
+        values["club_id"] = (
+            ensure_club(connection, record["club"]) if record.get("club") else None
+        )
+        key = {field: values[field] for field in ("player_id", "season_id")}
+        existing = connection.find("player_jerseys", **key)
+        if existing:
+            values["source_id"] = existing["source_id"]
     else:
         event_type = record.get("event_type")
         if event_type == "player_of_the_year":
@@ -1334,6 +1389,47 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
         for source in make_review(connection, source_ids=pending)["sources"]
     }
     resolve_repeated_ocr_names(connection, documents)
+    jersey_votes = {}
+    pending_names = {
+        record["player"]
+        for document in documents.values()
+        for record in document["records"]
+        if isinstance(record.get("player"), str)
+        and not re.fullmatch(r"[A-Za-z0]?\..*", record["player"].strip())
+    }
+    for document in documents.values():
+        context = season_contexts.get(document["source_id"])
+        for record in document["records"]:
+            name = record.get("player")
+            if record.get("type") != "player_jersey" or not name:
+                continue
+            season = record.get("season") or (context[0] if context else None)
+            if season is None:
+                continue
+            matching, _ = candidate_player_matches(connection, name)
+            if len(matching) == 1:
+                record["player_id"] = matching[0]["id"]
+                record["player"] = matching[0]["name"]
+            elif len(matching) > 1:
+                continue
+            else:
+                resolved = jersey_candidate_name(name, pending_names)
+                if resolved is None:
+                    continue
+                record["player"] = resolved
+            record["context_basis"] = (
+                "Abbreviated roster name resolved during import; the screenshot "
+                "shows the displayed short form."
+            )
+            votes = jersey_votes.setdefault((record["player"], season), {})
+            votes[record["squad_number"]] = votes.get(record["squad_number"], 0) + 1
+    jersey_numbers = {}
+    for key, votes in jersey_votes.items():
+        leading = [
+            number for number, count in votes.items() if count == max(votes.values())
+        ]
+        if len(leading) == 1:
+            jersey_numbers[key] = leading[0]
     counts = {
         "imported_sources": 0,
         "imported_records": 0,
@@ -1385,6 +1481,7 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
                             "player_snapshot",
                             "player_competition_snapshot",
                             "competition_event",
+                            "player_jersey",
                         }
                         and record.get("event_type") != "player_of_the_year"
                         and not record.get("season")
@@ -1392,7 +1489,10 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
                         context = season_contexts.get(source["id"])
                         if context:
                             record["season"] = context[0]
-                            if record["type"] != "competition_event":
+                            if record["type"] not in {
+                                "competition_event",
+                                "player_jersey",
+                            }:
                                 record["date_basis"] = (
                                     f"Season inferred from screenshot context: {context[1]}. "
                                     "No exact observation date inferred."
@@ -1414,6 +1514,13 @@ def import_pending(connection, sequences=None, refreshed_source_ids=None):
                         and record.get("type") == "player_match"
                     ):
                         normalize_goalkeeper(connection, record)
+                document["records"] = [
+                    record
+                    for record in document["records"]
+                    if record.get("type") != "player_jersey"
+                    or record.get("squad_number")
+                    == jersey_numbers.get((record.get("player"), record.get("season")))
+                ]
                 document["complete"] = True
                 result = approve_review(
                     connection,

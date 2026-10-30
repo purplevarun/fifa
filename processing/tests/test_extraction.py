@@ -659,6 +659,76 @@ class NonMatchExtractionTests(unittest.TestCase):
             )
             self.assertEqual(records, [])
 
+    def test_squad_status_roster_reads_jersey_numbers(self):
+        image = Image.new("RGB", (1366, 768), "white")
+        tokens = ocr_tokens(
+            [
+                ("STATUS", 142, 172, 165, 182),
+                ("STATS", 265, 172, 290, 182),
+                ("No.", 80, 205, 115, 225),
+                ("Pos", 140, 205, 168, 225),
+                ("Name", 195, 205, 232, 225),
+                ("OVR", 415, 205, 442, 225),
+                ("Role", 465, 205, 498, 225),
+                ("Form", 555, 205, 588, 225),
+                ("Morale", 640, 205, 690, 225),
+                ("GK", 140, 242, 160, 258),
+                ("A. Ramsdale", 218, 242, 302, 258),
+                ("RB", 140, 284, 162, 300),
+                ("0. Phillips", 218, 284, 310, 300),
+                ("CB", 140, 326, 162, 342),
+                (".Johnson", 218, 326, 300, 342),
+                ("CM", 140, 368, 162, 384),
+                ("D. Williams", 218, 368, 315, 384),
+            ]
+        )
+        self.extractor.recognize = Mock(
+            return_value={
+                "roster.0.squad_number": {"raw_text": "1", "confidence": 0.9},
+                "roster.1.squad_number": {"raw_text": "23", "confidence": 0.9},
+                "roster.2.squad_number": {"raw_text": "", "confidence": 0.9},
+                "roster.3.squad_number": {"raw_text": "8", "confidence": 0.9},
+            }
+        )
+
+        records, fields = self.extractor.extract_squad_roster(
+            image, tokens, {"club": "Notts County"}
+        )
+
+        self.assertEqual(
+            [(record["player"], record["squad_number"]) for record in records],
+            [("A. Ramsdale", 1), ("O. Phillips", 23), ("D. Williams", 8)],
+        )
+        for record in records:
+            self.assertEqual(record["type"], "player_jersey")
+            self.assertEqual(record["club"], "Notts County")
+            self.assertIsNone(record["season"])
+        self.assertIn("roster.0.squad_number", fields)
+
+    def test_squad_roster_ignores_non_status_tabs(self):
+        image = Image.new("RGB", (1366, 768), "white")
+        tokens = ocr_tokens(
+            [
+                ("STATUS", 142, 172, 165, 182),
+                ("STATS", 265, 172, 290, 182),
+                ("Pos", 140, 205, 168, 225),
+                ("Name", 195, 205, 232, 225),
+                ("App", 300, 205, 330, 225),
+                ("Goals", 350, 205, 395, 225),
+                ("Assists", 410, 205, 465, 225),
+                ("A. Ramsdale", 218, 242, 302, 258),
+            ]
+        )
+        self.extractor.recognize = Mock()
+
+        records, fields = self.extractor.extract_squad_roster(
+            image, tokens, {"club": "Notts County"}
+        )
+
+        self.assertEqual(records, [])
+        self.assertEqual(fields, {})
+        self.extractor.recognize.assert_not_called()
+
     def test_inbox_loan_return_emails(self):
         returned = (
             "Bos, The loan deal for Test Player from Ajax has expired and "

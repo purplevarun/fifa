@@ -62,6 +62,12 @@ export interface Snapshot extends Entity {
 	observed_on: string | null;
 	date_precision: string;
 }
+export interface Jersey extends Entity {
+	player_id: string;
+	club_id: string | null;
+	season_id: string;
+	squad_number: number;
+}
 export interface MetricComparison {
 	observed: number | null;
 	derived: number | null;
@@ -108,6 +114,7 @@ export interface Dataset {
 	team_matches: Entity[];
 	player_matches: Performance[];
 	player_snapshots: Snapshot[];
+	player_jerseys: Jersey[];
 	player_competition_snapshots: Entity[];
 	player_transfers: Entity[];
 	competition_events: Entity[];
@@ -185,6 +192,7 @@ export function createModel(input: unknown): Model {
 		tables.some((table) => !Array.isArray(data[table]))
 	)
 		throw new Error("The local stats use an unsupported schema-version.");
+	if (!Array.isArray(data.player_jerseys)) data.player_jerseys = [];
 	const notts = data.clubs.find((club) => club.name === "Notts County");
 	if (!notts && data.matches.length)
 		throw new Error("Notts County is missing from the career export.");

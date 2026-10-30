@@ -40,6 +40,7 @@ EXPORT_TABLES = (
     "team_matches",
     "player_matches",
     "player_snapshots",
+    "player_jerseys",
     "player_competition_snapshots",
     "player_transfers",
     "competition_events",

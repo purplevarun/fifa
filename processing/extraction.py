@@ -877,6 +877,13 @@ class ScreenshotExtractor:
                 issues.append(
                     "Cumulative totals are separate observations, not extra match statistics."
                 )
+            roster, roster_fields = self.extract_squad_roster(image, tokens, record)
+            if roster:
+                records.extend(roster)
+                fields.update(roster_fields)
+                issues.append(
+                    "Jersey numbers come from the visible STATUS roster list; rows without a readable number are not imported."
+                )
         elif screen_type == "transfer":
             records, fields, transfer_issues = self.extract_transfer(tokens)
             issues.extend(transfer_issues)
@@ -929,7 +936,8 @@ class ScreenshotExtractor:
                 for field in ("first_name", "last_name")
             )
             for record in records:
-                record["player"] = name
+                if record.get("type") != "player_jersey":
+                    record["player"] = name
         for record in records:
             if not record.get("player"):
                 continue
@@ -1855,3 +1863,55 @@ class ScreenshotExtractor:
                 )(raw_text)
             records.append(record)
         return records, evidence, issues
+
+    def extract_squad_roster(self, image, tokens, profile):
+        header = set()
+        names = []
+        for token in tokens:
+            left = min(point[0] for point in token["box"])
+            cy = sum(point[1] for point in token["box"]) / 4
+            text = token["text"].strip()
+            if 0.26 < cy < 0.30:
+                header.add(compact(text))
+                continue
+            if (
+                0.30 < cy < 0.86
+                and 0.12 < left < 0.29
+                and re.fullmatch(r"[a-z0]?\.\s*[a-z].*", text.casefold())
+            ):
+                names.append((cy * BASE_HEIGHT, text))
+        if not {"no", "name", "role", "form", "morale"} <= header:
+            return [], {}
+        regions = {
+            f"roster.{row}.squad_number": (
+                55,
+                round(center) - 12,
+                132,
+                round(center) + 12,
+            )
+            for row, (center, name) in enumerate(names)
+        }
+        evidence = (
+            self.recognize(image, regions, set(regions), verify_numeric=True)
+            if regions
+            else {}
+        )
+        records = []
+        for row, (center, name) in enumerate(names):
+            number = parse_integer(evidence[f"roster.{row}.squad_number"]["raw_text"])
+            if number is None or not 1 <= number <= 99:
+                continue
+            player = re.sub(r"^0\.", "O.", name)
+            player = re.sub(r"^\.\s*", "", player).strip()
+            if not player:
+                continue
+            records.append(
+                {
+                    "type": "player_jersey",
+                    "player": player,
+                    "club": profile["club"],
+                    "season": None,
+                    "squad_number": number,
+                }
+            )
+        return records, evidence

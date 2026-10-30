@@ -2516,6 +2516,122 @@ class AutomaticImportTests(RecordTestCase):
         )
         self.assertEqual(self.store.count("reviews"), 3)
 
+    def squad_screen(self, player, jerseys, season=None):
+        return (
+            "squad",
+            [
+                {
+                    "type": "player_snapshot",
+                    "player": player,
+                    "club": "Notts County",
+                    "season": season,
+                    "overall": 65,
+                    "snapshot_kind": "first_observed",
+                    "date_precision": "unknown",
+                    "observed_on": None,
+                    **(
+                        {"date_basis": "Season stated in the test record."}
+                        if season
+                        else {}
+                    ),
+                },
+                *[
+                    {
+                        "type": "player_jersey",
+                        "player": name,
+                        "club": "Notts County",
+                        "season": None,
+                        "squad_number": number,
+                    }
+                    for name, number in jerseys
+                ],
+            ],
+        )
+
+    def test_jersey_numbers_import_with_abbreviated_names_and_context_season(self):
+        self.extract(
+            self.squad_screen(
+                "Harry Kewell",
+                [("H. Kewell", 10), ("O. Notsoclear", 99)],
+            ),
+            ("match_facts", [self.match]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 2)
+        jerseys = self.store.rows("player_jerseys")
+        self.assertEqual(len(jerseys), 1)
+        row = jerseys[0]
+        self.assertEqual(row["squad_number"], 10)
+        self.assertEqual(
+            self.store.get("players", row["player_id"])["name"], "Harry Kewell"
+        )
+        self.assertEqual(
+            self.store.get("seasons", row["season_id"])["label"], "2018/19"
+        )
+        self.assertEqual(
+            self.store.get("clubs", row["club_id"])["name"], "Notts County"
+        )
+
+    def test_jersey_consensus_prefers_the_majority_reading(self):
+        self.extract(
+            self.squad_screen("Harry Kewell", [("H. Kewell", 10)]),
+            self.squad_screen("Harry Kewell", [("H. Kewell", 10)]),
+            self.squad_screen("Harry Kewell", [("H. Kewell", 14)]),
+            ("match_facts", [self.match]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 4)
+        jerseys = self.store.rows("player_jerseys")
+        self.assertEqual(len(jerseys), 1)
+        self.assertEqual(jerseys[0]["squad_number"], 10)
+
+    def test_jersey_tie_drops_conflicting_readings(self):
+        self.extract(
+            self.squad_screen("Harry Kewell", [("H. Kewell", 10)]),
+            self.squad_screen("Harry Kewell", [("H. Kewell", 14)]),
+            ("match_facts", [self.match]),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 3)
+        self.assertEqual(self.store.count("player_jerseys"), 0)
+
+    def test_jersey_records_need_a_resolvable_player_and_season(self):
+        self.extract(
+            self.squad_screen("Harry Kewell", [("H. Kewell", 10)]),
+            ("match_facts", [self.match]),
+            self.squad_screen("Harry Kewell", [("H. Kewell", 10)], season="2019/20"),
+            (
+                "match_facts",
+                [
+                    {
+                        **self.match,
+                        "season": "2019/20",
+                        "played_on": "2019-07-04",
+                        "away_club": "Port Vale",
+                    }
+                ],
+            ),
+        )
+
+        result = import_pending(self.store)
+
+        self.assertEqual(result["skipped_sources"], [])
+        self.assertEqual(result["imported_sources"], 4)
+        jerseys = self.store.rows("player_jerseys")
+        self.assertEqual(len(jerseys), 1)
+        self.assertEqual(
+            self.store.get("seasons", jerseys[0]["season_id"])["label"], "2018/19"
+        )
+
 
 class CommandTests(RecordTestCase):
     def setUp(self):

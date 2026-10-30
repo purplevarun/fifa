@@ -127,6 +127,11 @@ DEFINITIONS = {
         "player_id season_id source_id snapshot_kind date_precision date_basis",
         unique=("player_id season_id source_id snapshot_kind",),
     ),
+    "player_jerseys": Definition(
+        fields("player_id club_id season_id source_id", "squad_number"),
+        "player_id club_id season_id source_id squad_number",
+        unique=("player_id season_id",),
+    ),
     "player_competition_snapshots": Definition(
         fields(
             "player_id club_id season_id competition_season_id source_id observed_on snapshot_kind date_basis scope",
@@ -220,6 +225,7 @@ def validate_field(table, field, value):
                 "duration_minutes",
                 "contract_months",
                 "loan_months",
+                "squad_number",
             }
             else 0
         )
@@ -227,7 +233,7 @@ def validate_field(table, field, value):
             100
             if field.endswith("_pct")
             else 99
-            if field in {"overall", "age"}
+            if field in {"overall", "age", "squad_number"}
             else 10
             if field in {"rating", "average_rating"}
             else None

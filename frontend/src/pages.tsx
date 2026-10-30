@@ -806,8 +806,17 @@ export function Players() {
 				matches,
 				opposition ? null : model.nottsId,
 			);
+			const jerseys = model.data.player_jerseys
+				.filter((row) => row.player_id === player.id)
+				.map((row) => ({
+					season: model.seasons.get(row.season_id)?.label ?? "",
+					number: row.squad_number,
+				}))
+				.sort((left, right) => left.season.localeCompare(right.season));
 			return {
 				...summary,
+				jersey: jerseys.at(-1)?.number ?? null,
+				jerseys,
 				growth:
 					summary.overall === null || summary.initialOverall === null
 						? null
@@ -858,6 +867,41 @@ export function Players() {
 			render: (player) => (
 				<span className="position">{player.position ?? "-"}</span>
 			),
+		},
+		{
+			key: "jersey",
+			title: "No.",
+			numeric: true,
+			value: (player) => player.jersey,
+			render: (player) =>
+				player.jersey === null ? (
+					<span className="muted">-</span>
+				) : (
+					<strong className="number">#{player.jersey}</strong>
+				),
+		},
+		{
+			key: "jerseyHistory",
+			title: "Shirt history",
+			render: (player) =>
+				player.jerseys.length === 0 ? (
+					<span className="muted">-</span>
+				) : (
+					<span
+						className="number"
+						title={player.jerseys
+							.map((entry) => `${entry.season}: #${entry.number}`)
+							.join("\n")}
+					>
+						{player.jerseys
+							.map((entry) => entry.number)
+							.filter(
+								(number, index, numbers) =>
+									index === 0 || number !== numbers[index - 1],
+							)
+							.join(" → ")}
+					</span>
+				),
 		},
 		{
 			key: "overall",
@@ -1047,6 +1091,14 @@ export function PlayerDetail() {
 	const player = id && model.players.get(id);
 	if (!player) return <Empty title="Player not found" />;
 	const stats = playerSummary(model, player, matches, null);
+	const jersey = model.data.player_jerseys
+		.filter((row) => row.player_id === player.id)
+		.sort((left, right) =>
+			(model.seasons.get(left.season_id)?.label ?? "").localeCompare(
+				model.seasons.get(right.season_id)?.label ?? "",
+			),
+		)
+		.at(-1)?.squad_number;
 	const appearances = [...stats.rows].sort((left, right) =>
 		(model.matchById.get(left.match_id)?.played_on ?? "").localeCompare(
 			model.matchById.get(right.match_id)?.played_on ?? "",
@@ -1125,7 +1177,7 @@ export function PlayerDetail() {
 			</CareerLink>
 			<PageHeading
 				title={player.name}
-				eyebrow={`${player.nationality ?? "Nationality not recorded"} / ${stats.position ?? "Position not recorded"}`}
+				eyebrow={`${player.nationality ?? "Nationality not recorded"} / ${stats.position ?? "Position not recorded"}${jersey === undefined ? "" : ` / #${jersey}`}`}
 			>
 				<div className="overall-mark">
 					<strong>{display(stats.overall)}</strong>

@@ -296,6 +296,9 @@ Supported screens include:
 - Dated outbound-loan confirmation emails that explicitly state an immediate move,
   and dated emails confirming a loan spell expired and the player returned.
 - League tables and squad-hub season totals across every competition shown.
+- Squad-hub STATUS roster jersey numbers, resolved from abbreviated
+  "X. Surname" rows to recorded players; conflicting readings across same-season
+  captures keep only the majority number, and ties are dropped.
 - Player of the Month, Player of the Year, player/goalkeeper competition awards, Golden Boot headlines and competition winners, including championship dashboard banners.
 
 Premier League, EFL Championship including the Champ. Play-Offs, and UEFA

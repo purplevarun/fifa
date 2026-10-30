@@ -163,6 +163,15 @@ export const fixture: Dataset = {
 			date_precision: "season",
 		},
 	],
+	player_jerseys: [
+		{
+			id: uuid(45),
+			player_id: forward,
+			club_id: notts,
+			season_id: season,
+			squad_number: 9,
+		},
+	],
 	player_competition_snapshots: [
 		{
 			id: uuid(50),
