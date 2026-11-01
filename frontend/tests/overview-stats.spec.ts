@@ -124,7 +124,9 @@ test("position leaders and hat-trick evidence work with filters on desktop and m
 		animations: "disabled",
 	});
 
-	await page.getByRole("checkbox", { name: "Include preseason" }).uncheck();
+	const preseason = page.getByRole("checkbox", { name: "Include preseason" });
+	await preseason.click();
+	await expect(preseason).not.toBeChecked();
 	await expect(feats.locator(".hat-trick-total strong")).toHaveText("1");
 	await page
 		.getByRole("combobox", { name: "Competition", exact: true })
