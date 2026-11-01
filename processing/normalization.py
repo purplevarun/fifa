@@ -215,10 +215,19 @@ CLUB_NAMES = {
         "R. Valladolid CF",
         "Angers SCO",
         "Boavista FC",
+        "Fulham",
+        "Leicester City",
+        "Manchester City",
+        "Newcastle Utd",
+        "Southampton",
+        "Spurs",
     )
 }
 # The OCR-readable ASCII spelling is the identity key for København's ø.
 CLUB_NAMES[identity_key("FC Kobenhavn")] = "FC København"
+# The W/E keyboard hint icons read as part of the club name on player
+# performance screens (e.g. the 26 October 2021 Carabao Cup tie at the Etihad).
+CLUB_NAMES[identity_key("Wmanchestercity")] = "Manchester City"
 VENUE_NAMES = {
     identity_key(name): "Ivy Lane"
     for name in ("Ivy Lane", "lvy Lane", "ivy Lane", "livy Lane")

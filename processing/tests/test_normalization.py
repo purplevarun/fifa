@@ -38,6 +38,10 @@ CLUB_CASES = (
     ("Aj Auxerre", "AJ Auxerre"),
     ("Sporting Cp", "Sporting CP"),
     ("FC Kobenhavn", "FC København"),
+    ("Leicestercity", "Leicester City"),
+    ("Manchestercity", "Manchester City"),
+    ("Wmanchestercity", "Manchester City"),
+    ("Newcastleutd", "Newcastle Utd"),
 )
 
 
@@ -157,7 +161,7 @@ class IdentityImportTests(unittest.TestCase):
                     self.connection.get("clubs", first)["name"],
                     canonical,
                 )
-        self.assertEqual(self.connection.count("clubs"), 21)
+        self.assertEqual(self.connection.count("clubs"), 24)
 
     def test_existing_variant_keeps_its_id_and_alias(self):
         existing = insert_entity(self.connection, "clubs", {"name": "Lincolncity"})
