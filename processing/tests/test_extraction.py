@@ -204,6 +204,7 @@ class ParsingTests(unittest.TestCase):
             "LEASUETW RA FIFA19 AFIFA19 EA FIFR19 EFL GA FIFA19 AFIFA19",
             "LEASUETW PA FIFR19 EFL AFIFA19 EAFIFA19 EFL AFIFA19 AFIFA19",
             "PA FIFA19 AFIFA19 EAFIFA19 EFL A FIFA19 AFIFA19",
+            "AFIFA19 Premier Leagve AFIFA19 FIFA19 Premier Leaigue FIFA19 FIFA19",
         )
         for footer in footers:
             with self.subTest(footer=footer):

@@ -42,6 +42,7 @@ CLUB_CASES = (
     ("Manchestercity", "Manchester City"),
     ("Wmanchestercity", "Manchester City"),
     ("Newcastleutd", "Newcastle Utd"),
+    ("Westham", "West Ham"),
 )
 
 
@@ -161,7 +162,7 @@ class IdentityImportTests(unittest.TestCase):
                     self.connection.get("clubs", first)["name"],
                     canonical,
                 )
-        self.assertEqual(self.connection.count("clubs"), 24)
+        self.assertEqual(self.connection.count("clubs"), 25)
 
     def test_existing_variant_keeps_its_id_and_alias(self):
         existing = insert_entity(self.connection, "clubs", {"name": "Lincolncity"})
@@ -258,6 +259,12 @@ class IdentityScreenshotTests(unittest.TestCase):
     def test_doncaster_header(self):
         result = self.extractor.extract(self.root / "1309.png")
         self.assertEqual(result["records"][0]["home_club"], "Doncaster")
+
+    def test_west_ham_and_fused_separator_header(self):
+        result = self.extractor.extract(self.root / "3125.png")
+        self.assertEqual(result["records"][0]["away_club"], "West Ham")
+        result = self.extractor.extract(self.root / "3169.png")
+        self.assertEqual(result["records"][0]["venue"], "Stamford Bridge")
 
 
 if __name__ == "__main__":

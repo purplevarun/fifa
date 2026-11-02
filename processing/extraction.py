@@ -288,7 +288,8 @@ def parse_header(text):
     venue = sections[1].strip() if len(sections) >= 3 else None
     if venue is None and matched:
         remainder = cleaned[matched.end() :].strip()
-        sections = re.split(r"\s*[|/]\s*|\s+[Il]\s+", remainder)
+        remainder = re.sub(r"^(?:[|/]+\s*|[Il]\s+)", "", remainder)
+        sections = re.split(r"\s*[|/]\s*|\s+[Il]\s+|(?<=\S)I(?=\s)", remainder)
         if len(sections) == 2 and any(
             alias in compact(sections[1]) for alias in COMPETITION_LABELS
         ):
@@ -377,8 +378,9 @@ def parse_calendar_month(text):
 def clean_news_text(text):
     """Drop sponsor footers and repair only unambiguous vocabulary joins."""
     tail = re.search(
-        r"(?:^|\s)(?:(?:[A-Z]{0,3}FIF[AR]\s*19|PA|RA|GA|EA|EFL|LEASUETW|A)\s*)+$",
+        r"(?:^|\s)(?:(?:[A-Z]{0,3}FIF[AR]\s*19|PA|RA|GA|EA|EFL|LEASUETW|PREMIER|LEA\w{0,4}E|A)\s*)+$",
         text,
+        re.IGNORECASE,
     )
     if tail and len(re.findall(r"FIF[AR]\s*19", tail.group())) >= 2:
         text = text[: tail.start()].rstrip()

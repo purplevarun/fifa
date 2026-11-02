@@ -220,6 +220,7 @@ CLUB_NAMES = {
         "Manchester City",
         "Newcastle Utd",
         "Southampton",
+        "West Ham",
         "Spurs",
     )
 }

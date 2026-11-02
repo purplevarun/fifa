@@ -50,6 +50,7 @@ class AuditParsingTests(unittest.TestCase):
             ("08 July 2018  San Siro l European Int'l Cup", "San Siro"),
             ("11 January 2020 I Ivy Lane l EFL League One", "Ivy Lane"),
             ("26 October 2019/Ivy Lane/EFL League One", "Ivy Lane"),
+            ("04 December 2021I Stamford BridgeI Premier League", "Stamford Bridge"),
         ):
             self.assertEqual(parse_header(text)["venue"], venue)
         for competition in (
