@@ -77,6 +77,27 @@ def apply_record_context(source, records, policy=None):
             for record in records:
                 if record.get("type") == "match":
                     record.update(check["fields"])
+    for departure in policy.get("departures", []):
+        if digest != departure["source"][1]:
+            continue
+        if any(
+            record.get("type") == "player_transfer"
+            and record.get("player") == departure["player"]
+            for record in records
+        ):
+            continue
+        records.append(
+            {
+                "type": "player_transfer",
+                "player": departure["player"],
+                "from_club": departure["from_club"],
+                "to_club": departure["to_club"],
+                "transfer_type": departure["transfer_type"],
+                "effective_on": departure["effective_on"],
+                "date_basis": departure["basis"],
+                "context_basis": departure["basis"],
+            }
+        )
     return records
 
 
@@ -149,6 +170,7 @@ def apply_saved_context(connection, root, policy=None):
     }
     supported.add(policy["transfer_interest"]["source"][1])
     supported.update(check["source"][1] for check in policy["match_checks"])
+    supported.update(item["source"][1] for item in policy.get("departures", []))
     sources = [
         source for source in select_sources(connection) if source["sha256"] in supported
     ]

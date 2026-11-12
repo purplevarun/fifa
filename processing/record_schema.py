@@ -230,7 +230,12 @@ def validate_field(table, field, value):
             else 0
         )
         upper = (
-            100
+            # FIFA can display percentages above 100 when it shows negative
+            # tackle counts (e.g. 2 won, -1 lost -> 200%); the displayed value
+            # is stored and the audit checks it against the original counts.
+            None
+            if (table, field) == ("player_matches", "tackle_accuracy_pct")
+            else 100
             if field.endswith("_pct")
             else 99
             if field in {"overall", "age", "squad_number"}

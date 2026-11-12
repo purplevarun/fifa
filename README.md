@@ -251,7 +251,7 @@ Python. A failed source import rolls back its in-memory changes without losing
 other valid sources. Previous diagnostic JSON is never a substitute for fresh OCR.
 Explicit owner confirmations in `processing/confirmed_context.json` are reapplied
 only to matching image content hashes: season-end cutoffs, captured news purpose,
-assumed observation dates and confirmed own goals. A reused filename with different
+assumed observation dates, confirmed own goals and departures no screen shows. A reused filename with different
 image content does not inherit those confirmations. Conflicting final scores stay
 pending rather than being forced to agree with player totals.
 
@@ -292,9 +292,15 @@ Supported screens include:
   kept as separate cumulative observations rather than extra match records.
 - Completed transfers and loans, weekly wages, contract lengths and loan lengths.
 - Accepted Transfer Hub fee offers, which record the agreed fee; the wage row on
-  that panel is the player's weekly wage, not a fee.
+  that panel is the player's weekly wage, not a fee. Accepted offers in the
+  RECEIVED OFFERS tab record the departure instead, with the destination read
+  from the agreed-terms sentence and a "Free Transfer" offer recorded as a
+  zero fee.
 - Dated outbound-loan confirmation emails that explicitly state an immediate move,
   and dated emails confirming a loan spell expired and the player returned.
+- Dated emails confirming a player sale ("X Sold", with the fee and buying
+  club), a completed free departure ("X Has Left The Club"), or an announced
+  pre-contract departure ("X Leaving", recorded without an effective date).
 - League tables and squad-hub season totals across every competition shown.
 - Squad-hub STATUS roster jersey numbers, resolved from abbreviated
   "X. Surname" rows to recorded players; conflicting readings across same-season

@@ -222,8 +222,15 @@ CLUB_NAMES = {
         "Southampton",
         "West Ham",
         "Spurs",
+        "RB Leipzig",
+        "VfB Stuttgart",
+        "Hertha BSC",
+        "FC Barcelona",
     )
 }
+# OCR reads these without diacritics; map to the on-screen spelling.
+CLUB_NAMES[identity_key("Nimes Olympique")] = "Nîmes Olympique"
+CLUB_NAMES[identity_key("Goztepe")] = "Göztepe"
 # The OCR-readable ASCII spelling is the identity key for København's ø.
 CLUB_NAMES[identity_key("FC Kobenhavn")] = "FC København"
 # The W/E keyboard hint icons read as part of the club name on player

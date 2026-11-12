@@ -20,6 +20,7 @@ BASE_WIDTH = 1366
 BASE_HEIGHT = 768
 COMPETITION_LABELS = {
     "europeanintlcup": "European International Cup",
+    "europeaninttcup": "European International Cup",
     "europeaninternationalcup": "European International Cup",
     "invitationalcup": "Invitational Cup",
     "eflleaguetwo": "EFL League Two",
@@ -325,16 +326,14 @@ def club_name(text):
         return None
     text = canonical_club_name(text)
     words = text.strip().title().split()
-    return (
-        " ".join(
-            word.upper()
-            if word.upper()
-            in {"FC", "MK", "AFC", "QPR", "SK", "AJ", "CP", "RSC", "CF", "SCO"}
-            else word
-            for word in words
-        )
-        or None
+    name = " ".join(
+        word.upper()
+        if word.upper()
+        in {"FC", "MK", "AFC", "QPR", "SK", "AJ", "CP", "RSC", "CF", "SCO"}
+        else word
+        for word in words
     )
+    return canonical_club_name(name) if name else None
 
 
 def news_title(text):
@@ -1006,6 +1005,14 @@ class ScreenshotExtractor:
         text = {field: reading["raw_text"] for field, reading in fields.items()}
         completed = "andhejustjoinedtheteam" in compact(text["completion"])
         precontract = "agreedprecontractterms" in compact(text["completion"])
+        received = any(
+            "allreceivedoffers" in compact(token["text"]) for token in tokens
+        )
+        departure = re.search(
+            r"agreed\s+terms\s+with\s+(.+?)\s+and\s+is\s+on\s+\S+\s+way\s+to\s+meet",
+            text["completion"],
+            re.IGNORECASE,
+        )
         transfer_type = {"transfer": "permanent", "loan": "loan"}.get(
             compact(text["transfer_type"])
         )
@@ -1015,13 +1022,22 @@ class ScreenshotExtractor:
             or compact(text["status"]) != "accepted"
             or not transfer_type
             or not text["player"]
-            or not text["to_club"]
+            or not (text["to_club"] or received)
         ):
             return (
                 [],
                 fields,
                 [
                     "No accepted signing or agreed pre-contract in the selected contract panel."
+                ],
+            )
+        if received and not departure:
+            return (
+                [],
+                fields,
+                [
+                    "Accepted offer in the received-offers tab, but the destination "
+                    "club is unreadable in the agreed-terms sentence."
                 ],
             )
         if panel == "transferoffers":
@@ -1065,9 +1081,12 @@ class ScreenshotExtractor:
         wage, currency, symbol = parse_money(text["weekly_wage_minor"])
         fee = None
         if panel == "transferoffers" and transfer_type == "permanent":
-            fee, fee_currency, fee_symbol = parse_money(text["transfer_fee_minor"])
-            currency = currency or fee_currency
-            symbol = symbol or fee_symbol
+            if compact(text["transfer_fee_minor"]) == "freetransfer":
+                fee = 0
+            else:
+                fee, fee_currency, fee_symbol = parse_money(text["transfer_fee_minor"])
+                currency = currency or fee_currency
+                symbol = symbol or fee_symbol
         record = {
             "type": "player_transfer",
             "player": text["player"],
@@ -1120,6 +1139,17 @@ class ScreenshotExtractor:
             record["date_basis"] += (
                 " Pre-contract capture date, not a known completion date."
             )
+        if received and departure:
+            record.update(
+                from_club="Notts County",
+                to_club=club_name(departure.group(1)),
+                context_basis=(
+                    "Accepted offer shown in the received-offers tab: the managed club "
+                    "is the seller and the player is leaving. The destination club comes "
+                    "from the agreed-terms sentence; the panel badge is not read as a "
+                    "departure record. No exact completion date inferred."
+                ),
+            )
         return (
             [record],
             fields,
@@ -1128,7 +1158,11 @@ class ScreenshotExtractor:
                     "context_basis",
                     "Confirm the transfer date/year and selling club; neither is inferred from a badge or filename.",
                 ),
-                "The Offer amount is the accepted transfer fee paid by the managed club."
+                (
+                    "The Offer amount is the accepted transfer fee received by the managed club."
+                    if received
+                    else "The Offer amount is the accepted transfer fee paid by the managed club."
+                )
                 if fee is not None
                 else "The contract offer is not a transfer fee. A dollar symbol alone does not identify its currency.",
             ],
@@ -1354,11 +1388,89 @@ class ScreenshotExtractor:
             if club_basis:
                 record["context_basis"] = club_basis
             return [record], fields, []
+        sold = re.search(
+            r"deal\s+to\s+sell\s+(.+?)\s+for\s+([$£€]\s*[\d,\.]+[KM]?)\s+has\s+been\s+finalised",
+            body,
+            re.IGNORECASE,
+        )
+        buying_club = re.search(
+            r"agreed\s+on\s+personal\s+terms\s+with\s+(.+?)\.",
+            body,
+            re.IGNORECASE,
+        )
+        if sold and buying_club and subject.endswith("sold") and effective_on and club:
+            fee, currency, symbol = parse_money(sold.group(2))
+            record = {
+                "type": "player_transfer",
+                "player": sold.group(1).strip(),
+                "from_club": club,
+                "to_club": club_name(buying_club.group(1)),
+                "transfer_type": "permanent",
+                "effective_on": effective_on,
+                "fee_minor": fee,
+                "currency": currency,
+                "currency_display": symbol,
+                "date_basis": "Dated Chief Executive email confirms the sale was finalised.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
+        left = re.search(
+            r"that\s+(.+?)\s+has\s+left\s+the\s+club\s+having\s+earlier\s+"
+            r"agreed\s+to\s+sign\s+with\s+(.+?)\.",
+            body,
+            re.IGNORECASE,
+        )
+        if left and "haslefttheclub" in subject and effective_on and club:
+            record = {
+                "type": "player_transfer",
+                "player": left.group(1).strip(),
+                "from_club": club,
+                "to_club": club_name(left.group(2)),
+                "transfer_type": "permanent",
+                "effective_on": effective_on,
+                "date_basis": "Dated email confirms the player left the club; fee and terms are not shown.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis
+            return [record], fields, []
+        leaving = next(
+            (
+                sentence_match
+                for sentence in re.split(r"(?<=[.!?])\s+", body)
+                if (
+                    sentence_match := re.fullmatch(
+                        r"(.+?)\s+has\s+agreed\s+to\s+join\s+(.+?)\s+"
+                        r"on\s+the\s+expiry\s+o[fn]+\s+\S+\s+contract\.?",
+                        sentence.strip(),
+                        re.IGNORECASE,
+                    )
+                )
+            ),
+            None,
+        )
+        if leaving and subject.endswith("leaving") and effective_on and club:
+            record = {
+                "type": "player_transfer",
+                "player": leaving.group(1).strip(),
+                "from_club": club,
+                "to_club": club_name(leaving.group(2)),
+                "transfer_type": "permanent",
+                "effective_on": None,
+                "date_basis": (
+                    f"Email dated {effective_on} announces a free move at contract expiry; "
+                    "the completion date is not shown on this screen."
+                ),
+                "context_basis": "Pre-contract agreement announced by email; the player remains at the club until his contract expires.",
+            }
+            if club_basis:
+                record["context_basis"] = club_basis + " " + record["context_basis"]
+            return [record], fields, []
         return (
             [],
             fields,
             [
-                "No dated senior-contract acceptance, completed loan or loan return confirmed in the selected email."
+                "No dated senior-contract acceptance, completed loan, loan return, sale or departure confirmed in the selected email."
             ],
         )
 

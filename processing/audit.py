@@ -56,7 +56,9 @@ def summed(record, fields):
 def valid_number(field, value):
     upper = {"rating": 10, "average_rating": 10, "age": 99, "overall": 99}.get(field)
     if field.endswith("_pct"):
-        upper = 100
+        # Tackle accuracy can exceed 100% when FIFA displays negative tackle
+        # counts; the ratio check against the displayed counts guards it.
+        upper = None if field == "tackle_accuracy_pct" else 100
     if type(value) not in (int, float) or not math.isfinite(value):
         return False
     if value < 0 or (upper is not None and value > upper):

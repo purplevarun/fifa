@@ -125,6 +125,66 @@
           "2997aba83055ae5a934faad8c8373485aabb4c23e1b2a76ff0ab7ade6434bf98"
         ]
       ]
+    },
+    {
+      "season": "2021/22",
+      "basis": "Owner confirms screenshots 3611 and 3619–3627 were captured after the final match of 2021/22; the surrounding inbox screens are dated 30/06–02/07/2022. They show end-of-season squad status and season totals, not in-season observations. No exact capture day was supplied.",
+      "sources": [
+        [
+          3611,
+          "b7a9a59e618dbf931b57fe02a9b582af957b3859d8334dd9cc6d4647e0b1daa1"
+        ],
+        [
+          3619,
+          "d96c0a729bbd175b618449a3084ee4718047dd954dba879f225eb32db15c11b9"
+        ],
+        [
+          3620,
+          "6dadedbc706ec01d1f8e9f921fa0cd5b144155503b96ee4eef820d79e3a349ec"
+        ],
+        [
+          3621,
+          "ea19fee4eec38998583a89410a8c193042e3a286e54780d135754f1dff139c39"
+        ],
+        [
+          3622,
+          "4e41103b68c62ee2de04aba7513c0256ace77c54a5ea588c6399eea7f944bd06"
+        ],
+        [
+          3623,
+          "002f36274e3c56a44dbd83e616f7a0d3a2c0901b2e5c3307055464984dac1e58"
+        ],
+        [
+          3624,
+          "578d14e1c857f14034da321481a7093cdfb323d33152ee4edf37bfc3b99b473a"
+        ],
+        [
+          3625,
+          "8709277e9a60d1f950943c36871db098a9139d99719b4186a60bcb952303ce75"
+        ],
+        [
+          3626,
+          "e7fffb94638513e5cba80f774d76d20469050ad6586e14a038a3cb1b51d9ed61"
+        ],
+        [
+          3627,
+          "869f2bbc4ff281ad031b2d85728be27c6c64afdbec1d54a992a6cd0a9712cb12"
+        ]
+      ]
+    }
+  ],
+  "departures": [
+    {
+      "source": [
+        3781,
+        "7c87d163771a026ff0739b6260db7ab7f6e768bf8c1349cfd4ccdf7f04a790e9"
+      ],
+      "player": "Thomas Muller",
+      "from_club": "Notts County",
+      "to_club": "FC Barcelona",
+      "transfer_type": "permanent",
+      "effective_on": null,
+      "basis": "Owner confirms Müller was signed on 20/07/2022 and sold a few days later in exchange for Messi plus money; his row on this sent-offers screen shows a Barcelona badge. No exact departure date or fee is displayed, so none is inferred."
     }
   ],
   "transfer_interest": {
