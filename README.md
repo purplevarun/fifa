@@ -463,13 +463,13 @@ in review history, and republishes the dashboard. These versioned confirmations
 survive a clean rebuild; ad-hoc review changes saved only in diagnostics do not.
 
 For read-only scoreboard retries, use
-`python3 -m processing.recheck_scoreboards --screenshots 111,459,662 --vision --output processing/data/scoreboard-followup.json`.
+`python3 -m processing.recheck_scoreboards --screenshots 111,450,644 --vision --output processing/data/scoreboard-followup.json`.
 `--vision` adds independent Apple Vision readings and requires macOS and Swift;
 omit it for RapidOCR-only checks. The command never imports or resets data. Its
 report, like other generated diagnostics, is deleted by the next full rebuild.
 
 See [the manual follow-up](processing/MANUAL_FOLLOWUP.md) for applied confirmations
-and the resolved screenshot 459 score review. Transfer-interest articles are
+and the resolved screenshot 450 score review (numbered 459 at the time). Transfer-interest articles are
 kept as news events, not completed transfers or cumulative-stat snapshots.
 
 Backups, review tools, and developer checks are available directly through

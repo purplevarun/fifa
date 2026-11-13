@@ -546,10 +546,10 @@ class NonMatchExtractionTests(unittest.TestCase):
                     completion
                     if completion is not None
                     else "We have agreed terms with Test Player and he just joined the team.",
-                    687,
-                    392,
-                    1011,
-                    409,
+                    667,
+                    387,
+                    973,
+                    403,
                 ),
                 ("$5,900", 756, 523, 802, 547),
                 (status, 869, 529, 918, 546),
@@ -622,10 +622,10 @@ class NonMatchExtractionTests(unittest.TestCase):
                 ("None", 932, 357, 966, 378),
                 (
                     "We have agreed terms with Test Player and he just joined the team.",
-                    688,
-                    392,
-                    1017,
-                    409,
+                    668,
+                    387,
+                    979,
+                    403,
                 ),
                 ("From", 690, 470, 720, 485),
                 ("Offer", 734, 468, 763, 487),
@@ -801,10 +801,10 @@ class NonMatchExtractionTests(unittest.TestCase):
                     body
                     if body is not None
                     else "King's impressive performance for Notts County earned him the EFL League Two award.",
-                    955,
-                    304,
-                    1238,
-                    344,
+                    917,
+                    300,
+                    1196,
+                    340,
                 ),
                 ("Notts County Crowned EFL League One Champions", 105, 210, 353, 239),
                 ("05/10/2019", 105, 251, 187, 266),
@@ -889,10 +889,10 @@ class NonMatchExtractionTests(unittest.TestCase):
                         [
                             (
                                 "Assist Leader Test Player Targeted by",
-                                955,
-                                232,
-                                1260,
-                                250,
+                                917,
+                                230,
+                                1218,
+                                247,
                             ),
                             ("Racing Club", 955, 265, 1170, 283),
                             (body, 955, 312, 1260, 490),
@@ -1044,10 +1044,10 @@ class NonMatchExtractionTests(unittest.TestCase):
                     [
                         (
                             "Player of the Year Announced Lionel Messi",
-                            782,
-                            442,
-                            1030,
-                            459,
+                            756,
+                            434,
+                            991,
+                            450,
                         )
                     ],
                     calendar=calendar,
@@ -1103,10 +1103,10 @@ class ScreenshotTests(unittest.TestCase):
         self.assertNotIn("goals", record)
 
     def test_november_single_digit_stats_are_not_missing(self):
-        keeper = self.extract(1301, self.extractor.extract_player, goalkeeper=True)
+        keeper = self.extract(1259, self.extractor.extract_player, goalkeeper=True)
         self.assertEqual(keeper["player"], "Frederik Schram")
         self.assertEqual(keeper["assists"], 0)
-        for sequence, played_on in ((1296, "2019-11-12"), (1309, "2019-11-16")):
+        for sequence, played_on in ((1254, "2019-11-12"), (1267, "2019-11-16")):
             with self.subTest(sequence=sequence):
                 match = self.extract(sequence, self.extractor.extract_match)
                 self.assertEqual(match["played_on"], played_on)
@@ -1116,18 +1116,17 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_remaining_warning_screens_have_numeric_values(self):
         for sequence in (
-            1312,
-            1329,
-            1341,
-            1357,
-            1372,
-            1388,
+            1270,
+            1287,
+            1299,
+            1315,
+            1330,
+            1346,
+            1358,
+            1371,
+            1382,
             1400,
-            1413,
-            1426,
-            1444,
-            1458,
-            1459,
+            1414,
         ):
             with self.subTest(goalkeeper=sequence):
                 player = self.extract(
@@ -1146,15 +1145,15 @@ class ScreenshotTests(unittest.TestCase):
             "pass_accuracy_pct",
         )
         expected = {
-            1324: ((5, 1, 47, 5, 1, 1, 20, 88), (4, 3, 53, 10, 0, 0, 75, 90)),
-            1339: ((7, 4, 44, 6, 2, 1, 57, 86), (6, 2, 56, 2, 0, 2, 33, 78)),
-            1354: ((12, 7, 57, 5, 1, 4, 58, 85), (5, 3, 43, 11, 2, 1, 60, 83)),
-            1367: ((4, 0, 47, 6, 0, 2, 0, 87), (8, 5, 53, 6, 0, 1, 62, 86)),
-            1381: ((6, 3, 52, 7, 0, 5, 50, 71), (1, 1, 48, 3, 0, 0, 100, 85)),
-            1408: ((2, 1, 52, 6, 0, 1, 50, 91), (4, 2, 48, 6, 1, 2, 50, 80)),
-            1424: ((8, 2, 51, 7, 1, 0, 25, 88), (9, 5, 49, 12, 1, 0, 55, 91)),
-            1439: ((7, 5, 41, 5, 2, 2, 71, 82), (10, 8, 59, 5, 2, 1, 80, 84)),
-            1454: ((2, 2, 45, 6, 0, 0, 100, 82), (3, 1, 55, 7, 3, 1, 33, 80)),
+            1282: ((5, 1, 47, 5, 1, 1, 20, 88), (4, 3, 53, 10, 0, 0, 75, 90)),
+            1297: ((7, 4, 44, 6, 2, 1, 57, 86), (6, 2, 56, 2, 0, 2, 33, 78)),
+            1312: ((12, 7, 57, 5, 1, 4, 58, 85), (5, 3, 43, 11, 2, 1, 60, 83)),
+            1325: ((4, 0, 47, 6, 0, 2, 0, 87), (8, 5, 53, 6, 0, 1, 62, 86)),
+            1339: ((6, 3, 52, 7, 0, 5, 50, 71), (1, 1, 48, 3, 0, 0, 100, 85)),
+            1366: ((2, 1, 52, 6, 0, 1, 50, 91), (4, 2, 48, 6, 1, 2, 50, 80)),
+            1380: ((8, 2, 51, 7, 1, 0, 25, 88), (9, 5, 49, 12, 1, 0, 55, 91)),
+            1395: ((7, 5, 41, 5, 2, 2, 71, 82), (10, 8, 59, 5, 2, 1, 80, 84)),
+            1410: ((2, 2, 45, 6, 0, 0, 100, 82), (3, 1, 55, 7, 3, 1, 33, 80)),
         }
         for sequence, values in expected.items():
             with self.subTest(match=sequence):
@@ -1167,10 +1166,10 @@ class ScreenshotTests(unittest.TestCase):
     def test_name_readings_agree_with_detected_tight_crops(self):
         for sequence, expected, refined in (
             (31, "Elliott Hewitt", True),
-            (352, "Elliott Hewitt", True),
-            (914, "Leo Ostigard", True),
-            (1292, "Leo Ostigard", False),
-            (2508, "George Baker", True),
+            (348, "Elliott Hewitt", True),
+            (878, "Leo Ostigard", True),
+            (1250, "Leo Ostigard", False),
+            (2458, "George Baker", True),
         ):
             with self.subTest(sequence=sequence):
                 extraction = self.extractor.extract(
@@ -1191,13 +1190,13 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_squad_overall_snapshots(self):
         first = self.extract(1, self.extractor.extract_snapshot)
-        last = self.extract(908, self.extractor.extract_snapshot)
+        last = self.extract(873, self.extractor.extract_snapshot)
         self.assertEqual((first["overall"], last["overall"]), (62, 65))
         self.assertEqual(first["player"], last["player"])
         self.assertIsNone(first["observed_on"])
 
     def test_season_totals_remain_separate_from_match_stats(self):
-        with Image.open(self.root / "raw_screenshots/909.png") as image:
+        with Image.open(self.root / "raw_screenshots/874.png") as image:
             records, evidence, _issues = self.extractor.extract_squad_totals(
                 image.convert("RGB")
             )
@@ -1215,7 +1214,7 @@ class ScreenshotTests(unittest.TestCase):
         self.assertIn("season_totals.5.goals", evidence)
 
     def test_season_table_detection_survives_misread_heading(self):
-        extraction = self.extractor.extract(self.root / "raw_screenshots/924.png")
+        extraction = self.extractor.extract(self.root / "raw_screenshots/888.png")
         records = [
             record
             for record in extraction["records"]
@@ -1225,7 +1224,7 @@ class ScreenshotTests(unittest.TestCase):
         self.assertEqual(records[0]["player"], "Elliott Hewitt")
 
     def test_completed_loan_preserves_terms_without_inventing_a_date_or_fee(self):
-        extraction = self.extractor.extract(self.root / "raw_screenshots/1084.png")
+        extraction = self.extractor.extract(self.root / "raw_screenshots/1044.png")
         self.assertEqual(
             [record["type"] for record in extraction["records"]], ["player_transfer"]
         )
@@ -1239,8 +1238,8 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_completed_permanent_transfers(self):
         for sequence, player, wage, months in (
-            (977, "Matty James", 3599900, 24),
-            (1011, "Tosin Adarabioyo", 590000, 36),
+            (939, "Matty James", 3599900, 24),
+            (973, "Tosin Adarabioyo", 590000, 36),
         ):
             with self.subTest(sequence=sequence):
                 extraction = self.extractor.extract(
@@ -1256,9 +1255,9 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_player_of_the_month_articles_and_headlines(self):
         for sequence, player, period, announced_on, competition in (
-            (183, "King", "2018-08", "2018-09-05", "EFL League Two"),
-            (257, "King", "2018-09", "2018-10-05", "EFL League Two"),
-            (1207, "Calvert-Lewin", "2019-09", "2019-10-05", None),
+            (182, "King", "2018-08", "2018-09-05", "EFL League Two"),
+            (254, "King", "2018-09", "2018-10-05", "EFL League Two"),
+            (1165, "Calvert-Lewin", "2019-09", "2019-10-05", None),
         ):
             with self.subTest(sequence=sequence):
                 extraction = self.extractor.extract(
@@ -1285,7 +1284,7 @@ class ScreenshotTests(unittest.TestCase):
             ("Notts County", "European International Cup"),
         )
         self.assertEqual(player["announced_on"], "2018-07-18")
-        records = self.extractor.extract(self.root / "raw_screenshots/906.png")[
+        records = self.extractor.extract(self.root / "raw_screenshots/871.png")[
             "records"
         ]
         by_type = {record["event_type"]: record for record in records}
@@ -1314,10 +1313,10 @@ class ScreenshotTests(unittest.TestCase):
 
     def test_dashboard_award_banners_do_not_borrow_match_or_training_details(self):
         for sequence, player, period in (
-            (677, "Williams", "2019-01"),
-            (720, "Haaland", "2019-02"),
-            (813, "Haaland", "2019-03"),
-            (1116, "Kubo", "2019-08"),
+            (657, "Williams", "2019-01"),
+            (700, "Haaland", "2019-02"),
+            (781, "Haaland", "2019-03"),
+            (1075, "Kubo", "2019-08"),
         ):
             with self.subTest(sequence=sequence):
                 extraction = self.extractor.extract(
@@ -1334,7 +1333,7 @@ class ScreenshotTests(unittest.TestCase):
     def test_annotated_championship_and_annual_award_banners(self):
         for sequence, expected in (
             (
-                907,
+                872,
                 {
                     "event_type": "champion",
                     "club": "Notts County",
@@ -1345,7 +1344,7 @@ class ScreenshotTests(unittest.TestCase):
                 },
             ),
             (
-                1393,
+                1351,
                 {
                     "event_type": "player_of_the_year",
                     "player": "Lionel Messi",

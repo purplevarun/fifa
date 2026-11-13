@@ -1,5 +1,9 @@
 # Owner-confirmed follow-up — 22 October 2026
 
+> Screenshot numbers below predate the 13 November 2026 deduplication and
+> renumbering; the old→new map is preserved at
+> `../fifa-career-mode-backups/2026-11-13-dedup/renumbering.json`.
+
 This supersedes the open date/own-goal questions in REBUILD_REVIEW.md and
 SCORING_REVIEW.md. Applied locally without a clean rebuild, commit or push.
 Original OCR evidence and review history were retained. A backup was saved at

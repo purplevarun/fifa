@@ -390,7 +390,7 @@ class AuditScreenshotTests(unittest.TestCase):
         return self.extractor.extract(self.root / f"{number}.png")
 
     def test_all_first_season_tables_have_readable_numbers_and_balanced_totals(self):
-        for number in range(908, 930):
+        for number in range(873, 893):
             with self.subTest(number=number):
                 result = self.extract(number)
                 self.assertEqual(
@@ -400,24 +400,24 @@ class AuditScreenshotTests(unittest.TestCase):
                 self.assertEqual(
                     result["evidence"]["extractor_version"], EXTRACTOR_VERSION
                 )
-        result = self.extract(908)
+        result = self.extract(873)
         self.assertEqual(result["records"][2]["appearances"], 41)
         self.assertEqual(result["records"][4]["appearances"], 2)
 
     def test_championship_header(self):
-        result = self.extract(1944)
+        result = self.extract(1896)
         self.assertEqual(result["records"][0]["competition"], "EFL Championship")
         self.assertEqual(result["records"][0]["played_on"], "2020-08-05")
 
     def test_fixture_club_names_exclude_background_prefixes(self):
-        for number, club in ((1859, "Sunderland"), (1895, "Estac Troyes")):
+        for number, club in ((1811, "Sunderland"), (1847, "Estac Troyes")):
             result = self.extract(number)
             self.assertEqual(result["records"][0]["home_club"], club)
             self.assertEqual(result["records"][0]["away_club"], "Notts County")
             self.assertIn("initial_reading", result["evidence"]["fields"]["home_club"])
 
     def test_leaderboards_keep_unshown_metrics_unknown(self):
-        for number in range(1876, 1882):
+        for number in range(1828, 1834):
             with self.subTest(number=number):
                 result = self.extract(number)
                 self.assertEqual(result["screen_type"], "player_leaderboard")
@@ -428,14 +428,14 @@ class AuditScreenshotTests(unittest.TestCase):
                 for record in result["records"]:
                     self.assertNotIn("average_rating", record)
                     self.assertIsNone(record["observed_on"])
-        records = self.extract(1876)["records"]
+        records = self.extract(1828)["records"]
         self.assertEqual(
             [(r["player"], r["goals"], r["appearances"]) for r in records],
             [("Kubo", 23, 43), ("Calvert-Lewin", 21, 32)],
         )
 
     def test_dated_outbound_loan_and_user_confirmed_precontract(self):
-        record = self.extract(1942)["records"][0]
+        record = self.extract(1894)["records"][0]
         self.assertEqual(
             (record["player"], record["from_club"], record["to_club"]),
             ("Erling Braut Haaland", "Notts County", "Ajax"),
@@ -443,10 +443,10 @@ class AuditScreenshotTests(unittest.TestCase):
         self.assertEqual(
             (record["effective_on"], record["loan_months"]), ("2020-07-22", 12)
         )
-        extraction = self.extract(1587)
+        extraction = self.extract(1542)
         transfer = extraction["records"][0]
         self.assertEqual(transfer["player"], "Seydou Doumbia")
-        self.assertEqual(transfer["from_club"], "Sporting Cp")
+        self.assertEqual(transfer["from_club"], "Sporting CP")
         self.assertEqual(transfer["to_club"], "Notts County")
         self.assertEqual(transfer["transfer_type"], "permanent")
         self.assertEqual(transfer["weekly_wage_minor"], 1500000)
@@ -461,8 +461,8 @@ class AuditScreenshotTests(unittest.TestCase):
 
     def test_wrapped_award_title_does_not_become_part_of_club_name(self):
         for number, player, when in (
-            (1753, "Williams", "2020-04-05"),
-            (1872, "James", "2020-05-23"),
+            (1708, "Williams", "2020-04-05"),
+            (1824, "James", "2020-05-23"),
         ):
             record = self.extract(number)["records"][0]
             self.assertEqual(record["player"], player)
@@ -470,7 +470,7 @@ class AuditScreenshotTests(unittest.TestCase):
             self.assertEqual(record["announced_on"], when)
 
     def test_negative_displayed_tackles_use_user_confirmed_absolute_values(self):
-        for number in (203, 270):
+        for number in (201, 267):
             result = self.extract(number)
             record = result["records"][0]
             self.assertEqual((record["tackles_won"], record["tackles_lost"]), (1, 1))

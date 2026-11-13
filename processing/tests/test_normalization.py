@@ -237,33 +237,33 @@ class IdentityScreenshotTests(unittest.TestCase):
 
     def test_five_reported_profile_errors(self):
         for number, field, expected in (
-            (911, "displayed_position", "GK"),
-            (914, "nationality", "Norway"),
-            (915, "nationality", "Scotland"),
-            (921, "nationality", "England"),
-            (925, "nationality", "Japan"),
+            (875, "displayed_position", "GK"),
+            (878, "nationality", "Norway"),
+            (879, "nationality", "Scotland"),
+            (885, "nationality", "England"),
+            (889, "nationality", "Japan"),
         ):
             with self.subTest(screenshot=number):
                 result = self.extractor.extract(self.root / f"{number}.png")
                 self.assertEqual(result["records"][0][field], expected)
 
     def test_transfer_nationality_and_news_reference_provenance(self):
-        transfer = self.extractor.extract(self.root / "1084.png")
+        transfer = self.extractor.extract(self.root / "1044.png")
         self.assertEqual(transfer["records"][0]["nationality"], "England")
         self.assertIn("profile_details", transfer["evidence"]["fields"])
-        news = self.extractor.extract(self.root / "1393.png")
+        news = self.extractor.extract(self.root / "1351.png")
         self.assertEqual(news["records"][0]["nationality"], "Argentina")
         self.assertEqual(news["records"][0]["nationality_basis"]["fifa19_id"], 158023)
         self.assertTrue(news["evidence"]["nationality_fallbacks"])
 
     def test_doncaster_header(self):
-        result = self.extractor.extract(self.root / "1309.png")
+        result = self.extractor.extract(self.root / "1267.png")
         self.assertEqual(result["records"][0]["home_club"], "Doncaster")
 
     def test_west_ham_and_fused_separator_header(self):
-        result = self.extractor.extract(self.root / "3125.png")
+        result = self.extractor.extract(self.root / "3070.png")
         self.assertEqual(result["records"][0]["away_club"], "West Ham")
-        result = self.extractor.extract(self.root / "3169.png")
+        result = self.extractor.extract(self.root / "3114.png")
         self.assertEqual(result["records"][0]["venue"], "Stamford Bridge")
 
 

@@ -4,170 +4,162 @@
   "season_ends": [
     {
       "season": "2018/19",
-      "basis": "Owner confirms screenshots 908–929 were captured after the final match of 2018/19; screenshot 907 supplies the league-win context. No exact capture day was supplied.",
+      "basis": "Owner confirms screenshots 873–892 were captured after the final match of 2018/19; screenshot 872 supplies the league-win context. No exact capture day was supplied.",
       "sources": [
         [
-          908,
+          873,
           "3b7815e4aa5ece2bac52953c0f8282e7de833deeb166a5d4c0821493d5d63926"
         ],
         [
-          909,
+          874,
           "b04080c282ea95f80987be9f5519ee7ea82f0a990d92d04497af58c1e9be3baf"
         ],
         [
-          910,
-          "d7fd4600b20c9e9a7b03b6e175aabce506b032403cd532f203c9528e2806eb26"
-        ],
-        [
-          911,
+          875,
           "e75628b236e44b372d775ea53fd0730d7918e22119f7e0ceac61bd18c46fdbc6"
         ],
         [
-          912,
+          876,
           "5b08bea3bfe49f148effc0a4858242fcf06518834bfdcc0b26920ce5b04756e4"
         ],
         [
-          913,
+          877,
           "47ff2d2dea92a78d0753d43ddc923397784835ce184172c9f80b833d549909cc"
         ],
         [
-          914,
+          878,
           "615b14c81e144fb95d465061635fa0b4ce5a8cb6b7c0a62c75e08248cc840fa6"
         ],
         [
-          915,
+          879,
           "b3c62358d89e476fe39a0e61acd78c01e2d7f748f1a5a21f0001798f2e5f5ac8"
         ],
         [
-          916,
+          880,
           "a3eaf7c96e8a60be978a3bf8314567cb404a82b7b01fd209d5910ba893d77a19"
         ],
         [
-          917,
+          881,
           "013154ed33d0f8ae928a92b1096ce9a7f6c6957801a6a70a5a88f98ef2ef4e57"
         ],
         [
-          918,
+          882,
           "9dcbcfaab106bf7a82c2e6aa63a19e54233bd9cb69ea2eca678fa6ec9343eaeb"
         ],
         [
-          919,
+          883,
           "90b1c60b79f13af5ae205ec1ee46b77fed3f889aaaed6c5945a9c470c0a6f5b9"
         ],
         [
-          920,
+          884,
           "f118e06cc223b3e9866de41323c8d8f869b88dd47d4722222d7541b820118d1b"
         ],
         [
-          921,
+          885,
           "cb7b866777482295917e1b992b1da9d44bca2d0c0be0bf9f95be3f28bb296cf5"
         ],
         [
-          922,
+          886,
           "6fc6ea26aa5863a233c5bad89476cd017b2e2e79acb101beeb32cde4566d2dbb"
         ],
         [
-          923,
+          887,
           "b7525e80a99313cdbb18ea0520c4bc73f27b242cd9b99038b4caf6affdc0af30"
         ],
         [
-          924,
+          888,
           "c7920cdcb6309b03b55fc1229469d86a837b800acadb132d9f2c19aee69191fd"
         ],
         [
-          925,
+          889,
           "e4710e8643ee601dbd4d2d2723989966d2ad93c30be674338dc27be661ef7087"
         ],
         [
-          926,
+          890,
           "5ea495bd0fa1d8461e1e15b13e5f79f5c3c1c470175fb4c41004c95d036d9756"
         ],
         [
-          927,
-          "d72e854717d05e4c3c8a619accf13ab2161562019a431a7b2308f6bb9231d3ff"
-        ],
-        [
-          928,
+          891,
           "542df5942d8dbe19969ce166d0724e78be3858b46aed8570bf94c21a45d7c3b3"
         ],
         [
-          929,
+          892,
           "033067c34a8813d7f2113fb5b20f4976c944c30ab094e35a1aa35254b2e6cda7"
         ]
       ]
     },
     {
       "season": "2019/20",
-      "basis": "Owner confirms the 1876–1881 end-of-season leaderboard batch. Retain each panel's actual competition: League One, League One Play-Offs or Invitational Cup; do not merge their goals/assists scopes.",
+      "basis": "Owner confirms the 1828–1833 end-of-season leaderboard batch. Retain each panel's actual competition: League One, League One Play-Offs or Invitational Cup; do not merge their goals/assists scopes.",
       "sources": [
         [
-          1876,
+          1828,
           "991d0dd160bf4069a39ac4ad2cffc8c44fb9359036afdbbedc54665608148d31"
         ],
         [
-          1877,
+          1829,
           "bc2071f93ed73f456af18fa7987cbe1057a65971d08e1f8f8152017a102c0881"
         ],
         [
-          1878,
+          1830,
           "57a34d4d8964666b0057d3bd41fc6d084f0d99b0f4321e9757b90080781abbe5"
         ],
         [
-          1879,
+          1831,
           "d61109fc2d09905b156d4fa27755efa41c4305f4b539cb5507ad0aaba064ad8f"
         ],
         [
-          1880,
+          1832,
           "5f4dc5717aba1c260716eb47cb04dd09b8c758e007beb85c8282e5a1c6e58b56"
         ],
         [
-          1881,
+          1833,
           "2997aba83055ae5a934faad8c8373485aabb4c23e1b2a76ff0ab7ade6434bf98"
         ]
       ]
     },
     {
       "season": "2021/22",
-      "basis": "Owner confirms screenshots 3611 and 3619–3627 were captured after the final match of 2021/22; the surrounding inbox screens are dated 30/06–02/07/2022. They show end-of-season squad status and season totals, not in-season observations. No exact capture day was supplied.",
+      "basis": "Owner confirms screenshots 3556 and 3564–3572 were captured after the final match of 2021/22; the surrounding inbox screens are dated 30/06–02/07/2022. They show end-of-season squad status and season totals, not in-season observations. No exact capture day was supplied.",
       "sources": [
         [
-          3611,
+          3556,
           "b7a9a59e618dbf931b57fe02a9b582af957b3859d8334dd9cc6d4647e0b1daa1"
         ],
         [
-          3619,
+          3564,
           "d96c0a729bbd175b618449a3084ee4718047dd954dba879f225eb32db15c11b9"
         ],
         [
-          3620,
+          3565,
           "6dadedbc706ec01d1f8e9f921fa0cd5b144155503b96ee4eef820d79e3a349ec"
         ],
         [
-          3621,
+          3566,
           "ea19fee4eec38998583a89410a8c193042e3a286e54780d135754f1dff139c39"
         ],
         [
-          3622,
+          3567,
           "4e41103b68c62ee2de04aba7513c0256ace77c54a5ea588c6399eea7f944bd06"
         ],
         [
-          3623,
+          3568,
           "002f36274e3c56a44dbd83e616f7a0d3a2c0901b2e5c3307055464984dac1e58"
         ],
         [
-          3624,
+          3569,
           "578d14e1c857f14034da321481a7093cdfb323d33152ee4edf37bfc3b99b473a"
         ],
         [
-          3625,
+          3570,
           "8709277e9a60d1f950943c36871db098a9139d99719b4186a60bcb952303ce75"
         ],
         [
-          3626,
+          3571,
           "e7fffb94638513e5cba80f774d76d20469050ad6586e14a038a3cb1b51d9ed61"
         ],
         [
-          3627,
+          3572,
           "869f2bbc4ff281ad031b2d85728be27c6c64afdbec1d54a992a6cd0a9712cb12"
         ]
       ]
@@ -176,7 +168,7 @@
   "departures": [
     {
       "source": [
-        3781,
+        3726,
         "7c87d163771a026ff0739b6260db7ab7f6e768bf8c1349cfd4ccdf7f04a790e9"
       ],
       "player": "Thomas Muller",
@@ -189,7 +181,7 @@
   ],
   "transfer_interest": {
     "source": [
-      2494,
+      2444,
       "db331f29d6876e69c0ce5b47ac86df0f99916d983647264983de08c8768c03ef"
     ],
     "observed_on": "2021-02-03",
@@ -200,14 +192,14 @@
   "opponent_own_goals": [
     {
       "source": [
-        1208,
+        1166,
         "40a466b01ba6dfb1746df4c1453fb32c6b5145914bf934d0e9014308b54a485e"
       ],
       "count": 1
     },
     {
       "source": [
-        1972,
+        1924,
         "caf1f73ba9781be4bcc6db8d632159d119ba40b95b299edcaaf04ec6b324636d"
       ],
       "count": 1
@@ -229,7 +221,7 @@
     },
     {
       "source": [
-        459,
+        450,
         "f2e6f3db85f26528dacc60f7653c9e63324603044832341f2d846a23122e4832"
       ],
       "fields": {
@@ -242,7 +234,7 @@
     },
     {
       "source": [
-        662,
+        644,
         "2a175070b2fd9ab345d82e289ad9861324e4f131581bf757a57c6c273e1e27cc"
       ],
       "fields": {},
@@ -250,10 +242,22 @@
     }
   ],
   "hat_trick_checks": [
-    [1500, "6a191e15da85cf5e2b3204506be27f84b4cb545943009348e4f308fb8e1d1373"],
-    [1559, "2365ee0fb01c7607590d8678323591e2d5cf261e2cb810ae70686b80d96518f1"],
-    [1589, "d1f296618344dfcc7d1d0fdda8bec2d3b7670ccec34d4dc9ab7bdbd355b17736"],
-    [2035, "ce56c30a7d630f0edeeb63ef0d526e179d8eda6de7b1917783c7eeb220834c93"]
+    [
+      1455,
+      "6a191e15da85cf5e2b3204506be27f84b4cb545943009348e4f308fb8e1d1373"
+    ],
+    [
+      1514,
+      "2365ee0fb01c7607590d8678323591e2d5cf261e2cb810ae70686b80d96518f1"
+    ],
+    [
+      1544,
+      "d1f296618344dfcc7d1d0fdda8bec2d3b7670ccec34d4dc9ab7bdbd355b17736"
+    ],
+    [
+      1986,
+      "ce56c30a7d630f0edeeb63ef0d526e179d8eda6de7b1917783c7eeb220834c93"
+    ]
   ],
   "pending_conflicts": []
 }

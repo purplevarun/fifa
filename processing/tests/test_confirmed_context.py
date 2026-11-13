@@ -55,8 +55,8 @@ class ConfirmedContextTests(unittest.TestCase):
         store.insert(
             "source_paths",
             {
-                "path": "raw_screenshots/908.png",
-                "sequence": 908,
+                "path": "raw_screenshots/873.png",
+                "sequence": 873,
                 "source_id": source["id"],
             },
         )
@@ -118,7 +118,7 @@ class ConfirmedContextTests(unittest.TestCase):
         source = next(
             check["source"]
             for check in policy["match_checks"]
-            if check["source"][0] == 459
+            if check["source"][0] == 450
         )
         record = apply_record_context(
             {"sha256": source[1]}, [{"type": "match", "home_goals": 1, "away_goals": 1}]

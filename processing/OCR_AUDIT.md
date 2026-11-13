@@ -1,6 +1,23 @@
 # Screenshot OCR audit
 
-## Current audit: 21 October 2026
+## Renumbering: 13 November 2026
+
+55 duplicate retake screenshots were identified by identical imported record keys
+(same fixture or same player card) and confirmed by position-aware OCR comparison
+and capture timestamps seconds apart. They were removed and the archive renumbered
+to `raw_screenshots/1.png` through `3741.png`. The removed originals and the
+old→new sequence map are preserved at
+`../fifa-career-mode-backups/2026-11-13-dedup/renumbering.json`.
+
+A clean rebuild then imported 3,737 sources with 0 errors and 0 skipped. The
+audit reports 4 `no_records` stat-less screens (2887–2889, 3573) and 4 ordered
+snapshot mismatches, all on Haaland's sequence-2767 squad screen — the documented
+loan-display quirk previously seen at sequence 2820 (FIFA shows zeroed
+parent-club stats mid-loan despite two recorded preseason appearances).
+
+Screenshot numbers in the reports below refer to the pre-renumbering archive.
+
+## Audit: 21 October 2026
 
 The 297 new screenshots were appended, in original capture-number order, as
 `raw_screenshots/2241.png` through `2537.png`. The archive now contains exactly
