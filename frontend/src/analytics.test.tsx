@@ -78,8 +78,8 @@ const sampleRoles: TestPerformance[] = [
 	{
 		player_id: "Playmaker",
 		displayed_position: "CAM",
-		goals: 1,
-		assists: 2,
+		goals: 2,
+		assists: 4,
 		passes_completed_short: 20,
 		key_passes: 4,
 		tackles_won: 1,
@@ -341,28 +341,28 @@ describe("position rankings", () => {
 		}
 	});
 	it.each([
-		["ST", "forward"],
-		["CF", "forward"],
-		["LW", "forward"],
-		["RW", "forward"],
-		["LF", "forward"],
-		["RF", "forward"],
-		["CM", "midfielder"],
-		["CAM", "playmaker"],
-		["CDM", "midfielder"],
-		["LM", "midfielder"],
-		["RM", "midfielder"],
-		["CB", "defender"],
-		["LB", "defender"],
-		["RB", "defender"],
-		["LWB", "defender"],
-		["RWB", "defender"],
-		["GK", "goalkeeper"],
+		["ST", ["forward", "playmaker"]],
+		["CF", ["forward", "playmaker"]],
+		["LW", ["forward", "playmaker"]],
+		["RW", ["forward", "playmaker"]],
+		["LF", ["forward", "playmaker"]],
+		["RF", ["forward", "playmaker"]],
+		["CM", ["midfielder", "playmaker"]],
+		["CAM", ["playmaker"]],
+		["CDM", ["midfielder"]],
+		["LM", ["midfielder", "playmaker"]],
+		["RM", ["midfielder", "playmaker"]],
+		["CB", ["defender"]],
+		["LB", ["defender"]],
+		["RB", ["defender"]],
+		["LWB", ["defender"]],
+		["RWB", ["defender"]],
+		["GK", ["goalkeeper"]],
 		[null, null],
 		["unknown", null],
 	])(
-		"ranks position %s only for the %s award when the stats exist",
-		(position, award) => {
+		"ranks position %s only for the %s awards when the stats exist",
+		(position, awards) => {
 			const model = career([
 				{
 					player_id: "Versatile",
@@ -382,7 +382,7 @@ describe("position rankings", () => {
 			]);
 			for (const role of positionRankings(model, model.matches).roles) {
 				// Unknown positions remain candidates for every award.
-				const expected = award === null || role.role === award;
+				const expected = awards === null || awards.includes(role.role);
 				expect(role.consideredPlayers).toBe(expected ? 1 : 0);
 				if (expected)
 					expect(role.candidates[0]).toMatchObject({
@@ -421,11 +421,18 @@ describe("position rankings", () => {
 		const midfielder = roles.find((role) => role.role === "midfielder")!;
 		expect(playmaker.candidates[0].name).toBe("Star CAM");
 		expect(midfielder.candidates[0].name).toBe("Quiet CM");
+		// A CAM never ranks for best midfielder, but a CM can rank for
+		// both midfielder and playmaker.
 		expect(
 			midfielder.candidates.some(
 				(candidate) => candidate.name === "Star CAM",
 			),
 		).toBe(false);
+		expect(
+			playmaker.candidates.some(
+				(candidate) => candidate.name === "Quiet CM",
+			),
+		).toBe(true);
 	});
 	it("combines all games despite position changes or future profile snapshots", () => {
 		const rows = repeat("Versatile", 10).map((row, index) => ({
@@ -504,9 +511,10 @@ describe("position rankings", () => {
 		const { roles } = positionRankings(model, model.matches);
 		const role = (name: string) =>
 			roles.find((group) => group.role === name)!;
-		// Positioned players stay in their own pool; unknown positions do not.
+		// Positioned players stay in their own pools; strikers also feed
+		// the playmaker pool, and unknown positions rank everywhere.
 		expect(role("forward").consideredPlayers).toBe(2);
-		expect(role("playmaker").consideredPlayers).toBe(2);
+		expect(role("playmaker").consideredPlayers).toBe(3);
 		expect(role("midfielder").consideredPlayers).toBe(1);
 		expect(role("defender").consideredPlayers).toBe(2);
 		expect(role("goalkeeper").consideredPlayers).toBe(2);
@@ -518,6 +526,7 @@ describe("position rankings", () => {
 		expect(playmakers.map((row) => row.name)).toEqual([
 			"Unknown",
 			"Creator",
+			"Striker",
 		]);
 		expect(playmakers[0].score).toBe(100);
 		expect(playmakers[0].metrics.map((metric) => metric.weight)).toEqual([
@@ -678,10 +687,10 @@ describe("position rankings", () => {
 			100,
 		);
 		for (const award of positionRankings(model, model.matches).roles) {
-			// The debutant is a striker, so they only rank for best forward;
-			// the positionless veteran remains a candidate for every award.
+			// The debutant is a striker, so they rank for best forward and
+			// best playmaker; the positionless veteran ranks everywhere.
 			expect(award.candidates.map((player) => player.name)).toEqual(
-				award.role === "forward"
+				award.role === "forward" || award.role === "playmaker"
 					? ["Experienced", "Debutant"]
 					: ["Experienced"],
 			);

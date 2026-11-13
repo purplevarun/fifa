@@ -130,7 +130,18 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "playmaker",
 		title: "Best playmaker",
 		color: "#76519a",
-		positions: ["CAM"],
+		positions: [
+			"ST",
+			"CF",
+			"CAM",
+			"CM",
+			"LF",
+			"RF",
+			"LW",
+			"RW",
+			"LM",
+			"RM",
+		],
 		metrics: [
 			{ field: "goals", label: "Goals", weight: 50 },
 			{ field: "assists", label: "Assists", weight: 50 },
@@ -244,29 +255,34 @@ function metricImpact(
 	};
 }
 
-const roleByPosition = new Map<string, AwardRole>(
-	positionDefinitions.flatMap((definition) =>
-		definition.positions.map(
-			(position) => [position, definition.role] as const,
-		),
-	),
-);
+const rolesByPosition = new Map<string, AwardRole[]>();
+for (const definition of positionDefinitions)
+	for (const position of definition.positions) {
+		const roles = rolesByPosition.get(position) ?? [];
+		roles.push(definition.role);
+		rolesByPosition.set(position, roles);
+	}
 
-// A player competes only for the award matching the position they play
-// most in the selected fixtures; unknown positions stay in every award.
-function primaryRole(rows: Performance[]): AwardRole | null {
-	const counts = new Map<AwardRole, number>();
+// A player competes for the awards matching the position they play most in
+// the selected fixtures; some positions feed several awards (a centre
+// midfielder can rank for midfielder and playmaker), and unknown positions
+// stay in every award.
+function primaryRoles(rows: Performance[]): Set<AwardRole> | null {
+	const counts = new Map<string, number>();
 	for (const row of rows) {
-		const role = roleByPosition.get(
-			String(row.displayed_position ?? row.played_position ?? ""),
+		const position = String(
+			row.displayed_position ?? row.played_position ?? "",
 		);
-		if (role) counts.set(role, (counts.get(role) ?? 0) + 1);
+		if (rolesByPosition.has(position))
+			counts.set(position, (counts.get(position) ?? 0) + 1);
 	}
 	if (!counts.size) return null;
 	const best = Math.max(...counts.values());
-	return positionDefinitions.find(
-		(definition) => counts.get(definition.role) === best,
-	)!.role;
+	const roles = new Set<AwardRole>();
+	for (const [position, count] of counts)
+		if (count === best)
+			for (const role of rolesByPosition.get(position)!) roles.add(role);
+	return roles;
 }
 
 export function positionRankings(model: Model, matches: Match[]) {
@@ -279,10 +295,11 @@ export function positionRankings(model: Model, matches: Match[]) {
 	}
 	const eligible = new Map<AwardRole | null, Map<string, Performance[]>>();
 	for (const [id, playerRows] of grouped) {
-		const role = primaryRole(playerRows);
-		const pool = eligible.get(role) ?? new Map<string, Performance[]>();
-		pool.set(id, playerRows);
-		eligible.set(role, pool);
+		for (const role of primaryRoles(playerRows) ?? [null]) {
+			const pool = eligible.get(role) ?? new Map<string, Performance[]>();
+			pool.set(id, playerRows);
+			eligible.set(role, pool);
+		}
 	}
 	const roles = positionDefinitions.map((definition) => {
 		const pool = new Map([

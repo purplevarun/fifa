@@ -14,9 +14,9 @@ export function PositionLeaders() {
 				<Pill>Stats-based / selected fixtures</Pill>
 			</SectionHeading>
 			<p className="muted position-intro">
-				Each player competes for the award matching their most-played
-				position; players without a recorded position are considered
-				for every award. {awardScoring.contribution}% contribution /{" "}
+				Each player competes for the awards matching their most-played
+				position; players without a recorded position are considered for
+				every award. {awardScoring.contribution}% contribution /{" "}
 				{awardScoring.perGame}% per-game performance /{" "}
 				{awardScoring.games}% games played.
 			</p>
@@ -202,13 +202,14 @@ export function PositionLeaders() {
 				<summary>How the award scores work</summary>
 				<p>
 					Only Notts County appearances in the selected season,
-					competition and preseason scope count. A player competes
-					for the award matching the position they played most in
-					the selection — a CAM ranks for best playmaker, not best
-					midfielder — so no player can sweep awards outside the
-					role they actually play. Appearances without a recorded
-					position remain statistical candidates for every award.
-					Position changes never split their records. These are
+					competition and preseason scope count. A player competes for
+					the awards matching the position they played most in the
+					selection — a CAM ranks for best playmaker, not best
+					midfielder, while a striker can rank for both best forward
+					and best playmaker — so no player can sweep awards outside
+					the positions they actually play. Appearances without a
+					recorded position remain statistical candidates for every
+					award. Position changes never split their records. These are
 					statistical awards, not FIFA overall ratings.
 				</p>
 				<p>
