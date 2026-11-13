@@ -1591,11 +1591,13 @@ def build_dataset(connection):
         "season_reconciliation": reconcile_totals(connection),
     }
     export_ordering = {"seasons": ("label",), "competitions": ("name",)}
+    newest_first = {"seasons"}
     for table in EXPORT_TABLES:
         ordering = export_ordering.get(table, DEFINITIONS[table].primary)
         rows = sorted(
             connection.rows(table),
             key=lambda row: tuple(row[field] for field in ordering),
+            reverse=table in newest_first,
         )
         for row in rows:
             if table == "players" and row.get("nationality") is not None:

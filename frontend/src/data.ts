@@ -195,7 +195,7 @@ export function createModel(input: unknown): Model {
 	if (!Array.isArray(data.player_jerseys)) data.player_jerseys = [];
 	// Exports order these tables by record id; display them meaningfully.
 	data.seasons = [...data.seasons].sort((left, right) =>
-		left.label.localeCompare(right.label),
+		right.label.localeCompare(left.label),
 	);
 	data.competitions = [...data.competitions].sort((left, right) =>
 		left.name.localeCompare(right.name),

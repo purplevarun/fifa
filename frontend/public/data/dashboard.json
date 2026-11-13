@@ -13325,24 +13325,24 @@
   ],
   "seasons": [
     {
-      "id": "967992f3-af91-4a74-991a-5e93c72a568f",
-      "label": "2018/19"
-    },
-    {
-      "id": "cb37b4d3-39bc-42e4-bbd6-e01313163cbd",
-      "label": "2019/20"
-    },
-    {
-      "id": "4a9286d2-43bc-4d24-ae34-90febbaf4905",
-      "label": "2020/21"
+      "id": "471b13b1-cb1a-41ca-aba9-98093ad80ddc",
+      "label": "2022/23"
     },
     {
       "id": "c4524a37-44d5-4072-bbda-788cd0dce8f8",
       "label": "2021/22"
     },
     {
-      "id": "471b13b1-cb1a-41ca-aba9-98093ad80ddc",
-      "label": "2022/23"
+      "id": "4a9286d2-43bc-4d24-ae34-90febbaf4905",
+      "label": "2020/21"
+    },
+    {
+      "id": "cb37b4d3-39bc-42e4-bbd6-e01313163cbd",
+      "label": "2019/20"
+    },
+    {
+      "id": "967992f3-af91-4a74-991a-5e93c72a568f",
+      "label": "2018/19"
     }
   ],
   "competitions": [
