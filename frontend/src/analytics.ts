@@ -111,6 +111,7 @@ interface PositionDefinition {
 	role: AwardRole;
 	title: string;
 	color: string;
+	positions: string[];
 	metrics: ScoreMetric[];
 }
 
@@ -119,6 +120,7 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "forward",
 		title: "Best forward",
 		color: "#276f54",
+		positions: ["ST", "CF", "LF", "RF", "LW", "RW"],
 		metrics: [
 			{ field: "goals", label: "Goals", weight: 80 },
 			{ field: "assists", label: "Assists", weight: 20 },
@@ -128,6 +130,7 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "playmaker",
 		title: "Best playmaker",
 		color: "#76519a",
+		positions: ["CAM"],
 		metrics: [
 			{ field: "goals", label: "Goals", weight: 50 },
 			{ field: "assists", label: "Assists", weight: 50 },
@@ -137,6 +140,7 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "midfielder",
 		title: "Best midfielder",
 		color: "#356a9a",
+		positions: ["CM", "CDM", "LM", "RM"],
 		metrics: [
 			{
 				field: "passes_completed",
@@ -151,6 +155,7 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "defender",
 		title: "Best defender",
 		color: "#a04d67",
+		positions: ["CB", "LB", "RB", "LWB", "RWB"],
 		metrics: [
 			{ field: "tackles_won", label: "Tackles won", weight: 45 },
 			{
@@ -169,6 +174,7 @@ export const positionDefinitions: PositionDefinition[] = [
 		role: "goalkeeper",
 		title: "Best goalkeeper",
 		color: "#9d731b",
+		positions: ["GK"],
 		metrics: [
 			{ field: "saves", label: "Saves (caught + parried)", weight: 50 },
 			{ field: "clean_sheets", label: "Clean sheets", weight: 30 },
@@ -238,20 +244,57 @@ function metricImpact(
 	};
 }
 
+const roleByPosition = new Map<string, AwardRole>(
+	positionDefinitions.flatMap((definition) =>
+		definition.positions.map(
+			(position) => [position, definition.role] as const,
+		),
+	),
+);
+
+// A player competes only for the award matching the position they play
+// most in the selected fixtures; unknown positions stay in every award.
+function primaryRole(rows: Performance[]): AwardRole | null {
+	const counts = new Map<AwardRole, number>();
+	for (const row of rows) {
+		const role = roleByPosition.get(
+			String(row.displayed_position ?? row.played_position ?? ""),
+		);
+		if (role) counts.set(role, (counts.get(role) ?? 0) + 1);
+	}
+	if (!counts.size) return null;
+	const best = Math.max(...counts.values());
+	return positionDefinitions.find(
+		(definition) => counts.get(definition.role) === best,
+	)!.role;
+}
+
 export function positionRankings(model: Model, matches: Match[]) {
 	const rows = appearances(model, matches);
-	// Awards describe statistical contributions, not the player's position.
 	const grouped = new Map<string, Performance[]>();
 	for (const row of rows) {
 		const current = grouped.get(row.player_id) ?? [];
 		current.push(row);
 		grouped.set(row.player_id, current);
 	}
+	const eligible = new Map<AwardRole | null, Map<string, Performance[]>>();
+	for (const [id, playerRows] of grouped) {
+		const role = primaryRole(playerRows);
+		const pool = eligible.get(role) ?? new Map<string, Performance[]>();
+		pool.set(id, playerRows);
+		eligible.set(role, pool);
+	}
 	const roles = positionDefinitions.map((definition) => {
+		const pool = new Map([
+			...(eligible.get(definition.role) ?? []),
+			// Players without a recorded position cannot be tied to a role,
+			// so the statistics still consider them for every award.
+			...(eligible.get(null) ?? []),
+		]);
 		const candidates: PositionCandidate[] = [];
 		let insufficientDataPlayers = 0;
 		let noContributionPlayers = 0;
-		for (const [id, playerRows] of grouped) {
+		for (const [id, playerRows] of pool) {
 			// Use the SAME complete appearances for every component of a score.
 			const complete = playerRows
 				.map((row) =>
@@ -364,7 +407,7 @@ export function positionRankings(model: Model, matches: Match[]) {
 			candidates: ranked,
 			insufficientDataPlayers,
 			noContributionPlayers,
-			consideredPlayers: grouped.size,
+			consideredPlayers: pool.size,
 		};
 	});
 	return { roles };

@@ -172,7 +172,7 @@ const index = <Value extends Entity>(values: Value[]) =>
 export function createModel(input: unknown): Model {
 	if (!input || typeof input !== "object")
 		throw new Error("The career export is not valid JSON data.");
-	const data = input as Dataset;
+	const data = { ...(input as Dataset) };
 	const tables = [
 		"players",
 		"clubs",
@@ -193,6 +193,13 @@ export function createModel(input: unknown): Model {
 	)
 		throw new Error("The local stats use an unsupported schema-version.");
 	if (!Array.isArray(data.player_jerseys)) data.player_jerseys = [];
+	// Exports order these tables by record id; display them meaningfully.
+	data.seasons = [...data.seasons].sort((left, right) =>
+		left.label.localeCompare(right.label),
+	);
+	data.competitions = [...data.competitions].sort((left, right) =>
+		left.name.localeCompare(right.name),
+	);
 	const notts = data.clubs.find((club) => club.name === "Notts County");
 	if (!notts && data.matches.length)
 		throw new Error("Notts County is missing from the career export.");

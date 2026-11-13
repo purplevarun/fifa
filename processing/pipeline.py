@@ -1590,8 +1590,9 @@ def build_dataset(connection):
         "match_coverage": coverage_report(connection),
         "season_reconciliation": reconcile_totals(connection),
     }
+    export_ordering = {"seasons": ("label",), "competitions": ("name",)}
     for table in EXPORT_TABLES:
-        ordering = DEFINITIONS[table].primary
+        ordering = export_ordering.get(table, DEFINITIONS[table].primary)
         rows = sorted(
             connection.rows(table),
             key=lambda row: tuple(row[field] for field in ordering),

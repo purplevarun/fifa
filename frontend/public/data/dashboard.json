@@ -13325,84 +13325,30 @@
   ],
   "seasons": [
     {
-      "id": "471b13b1-cb1a-41ca-aba9-98093ad80ddc",
-      "label": "2022/23"
+      "id": "967992f3-af91-4a74-991a-5e93c72a568f",
+      "label": "2018/19"
+    },
+    {
+      "id": "cb37b4d3-39bc-42e4-bbd6-e01313163cbd",
+      "label": "2019/20"
     },
     {
       "id": "4a9286d2-43bc-4d24-ae34-90febbaf4905",
       "label": "2020/21"
     },
     {
-      "id": "967992f3-af91-4a74-991a-5e93c72a568f",
-      "label": "2018/19"
-    },
-    {
       "id": "c4524a37-44d5-4072-bbda-788cd0dce8f8",
       "label": "2021/22"
     },
     {
-      "id": "cb37b4d3-39bc-42e4-bbd6-e01313163cbd",
-      "label": "2019/20"
+      "id": "471b13b1-cb1a-41ca-aba9-98093ad80ddc",
+      "label": "2022/23"
     }
   ],
   "competitions": [
     {
-      "id": "05c20a3b-a5be-43b4-9f70-d398e02abccc",
-      "name": "UEFA Europa League",
-      "kind": "cup",
-      "is_preseason": false
-    },
-    {
-      "id": "143d19b5-92a0-468f-91cb-4ff9b65d5d5e",
-      "name": "EFL Championship",
-      "kind": "league",
-      "is_preseason": false
-    },
-    {
-      "id": "1a5a0613-947a-4914-9450-a4da079e0ac1",
-      "name": "EFL League One Play-Offs",
-      "kind": "cup",
-      "is_preseason": false
-    },
-    {
-      "id": "1fda097d-3bb6-4c3b-be7a-768a73a99653",
-      "name": "European International Cup",
-      "kind": "cup",
-      "is_preseason": true
-    },
-    {
-      "id": "243fa30b-67dc-46ea-a5e5-953c2c80cf06",
-      "name": "UEFA Champions League",
-      "kind": "cup",
-      "is_preseason": false
-    },
-    {
-      "id": "36820359-4afc-461d-8fde-ba819ad291ac",
-      "name": "EFL League Two",
-      "kind": "league",
-      "is_preseason": false
-    },
-    {
-      "id": "3d8aebd2-b6a8-4427-bd01-1087f6b35d53",
-      "name": "EFL League One",
-      "kind": "league",
-      "is_preseason": false
-    },
-    {
-      "id": "54cf3bd0-e8df-4a71-914e-a99f9dba3a0e",
-      "name": "FA Cup",
-      "kind": "cup",
-      "is_preseason": false
-    },
-    {
-      "id": "88523b58-335a-462f-a5fa-e48a15b1b48f",
-      "name": "EFL Championship Play-Offs",
-      "kind": "cup",
-      "is_preseason": false
-    },
-    {
-      "id": "a219029a-2fe5-492e-9ebf-50036e59de0b",
-      "name": "EFL League Two Play-Offs",
+      "id": "e5ad9b65-8ca6-466a-ab5e-ecb71cc0a333",
+      "name": "Carabao Cup",
       "kind": "cup",
       "is_preseason": false
     },
@@ -13413,9 +13359,51 @@
       "is_preseason": false
     },
     {
-      "id": "bfeb75d1-3b9a-4b59-97c5-9d42baf2d184",
-      "name": "Premier League",
+      "id": "143d19b5-92a0-468f-91cb-4ff9b65d5d5e",
+      "name": "EFL Championship",
       "kind": "league",
+      "is_preseason": false
+    },
+    {
+      "id": "88523b58-335a-462f-a5fa-e48a15b1b48f",
+      "name": "EFL Championship Play-Offs",
+      "kind": "cup",
+      "is_preseason": false
+    },
+    {
+      "id": "3d8aebd2-b6a8-4427-bd01-1087f6b35d53",
+      "name": "EFL League One",
+      "kind": "league",
+      "is_preseason": false
+    },
+    {
+      "id": "1a5a0613-947a-4914-9450-a4da079e0ac1",
+      "name": "EFL League One Play-Offs",
+      "kind": "cup",
+      "is_preseason": false
+    },
+    {
+      "id": "36820359-4afc-461d-8fde-ba819ad291ac",
+      "name": "EFL League Two",
+      "kind": "league",
+      "is_preseason": false
+    },
+    {
+      "id": "a219029a-2fe5-492e-9ebf-50036e59de0b",
+      "name": "EFL League Two Play-Offs",
+      "kind": "cup",
+      "is_preseason": false
+    },
+    {
+      "id": "1fda097d-3bb6-4c3b-be7a-768a73a99653",
+      "name": "European International Cup",
+      "kind": "cup",
+      "is_preseason": true
+    },
+    {
+      "id": "54cf3bd0-e8df-4a71-914e-a99f9dba3a0e",
+      "name": "FA Cup",
+      "kind": "cup",
       "is_preseason": false
     },
     {
@@ -13425,8 +13413,20 @@
       "is_preseason": true
     },
     {
-      "id": "e5ad9b65-8ca6-466a-ab5e-ecb71cc0a333",
-      "name": "Carabao Cup",
+      "id": "bfeb75d1-3b9a-4b59-97c5-9d42baf2d184",
+      "name": "Premier League",
+      "kind": "league",
+      "is_preseason": false
+    },
+    {
+      "id": "243fa30b-67dc-46ea-a5e5-953c2c80cf06",
+      "name": "UEFA Champions League",
+      "kind": "cup",
+      "is_preseason": false
+    },
+    {
+      "id": "05c20a3b-a5be-43b4-9f70-d398e02abccc",
+      "name": "UEFA Europa League",
       "kind": "cup",
       "is_preseason": false
     }
